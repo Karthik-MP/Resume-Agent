@@ -1,0 +1,20 @@
+[project]
+name = "resume-agent"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "beautifulsoup4>=4.14.3",
+    "ddgs>=9.10.0",
+    "langchain>=1.2.0",
+    "langchain-openai>=1.1.6",
+    "langgraph>=1.0.5",
+    "openai>=2.14.0",
+    "pydantic>=2.12.5",
+    "pytest>=9.0.2",
+    "python-dotenv>=1.0.0",
+    "requests>=2.32.5",
+    "ruff>=0.14.10",
+    "tavily-python>=0.7.17",
+]
