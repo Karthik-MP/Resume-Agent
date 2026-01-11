@@ -1,6 +1,4 @@
 # tests/test_profile.py
-import json
-import tempfile
 from resume_agent.profile import select_projects
 
 

@@ -1,6 +1,4 @@
 # tests/test_tex.py
-import os
-import tempfile
 from resume_agent.tex import resolve_includes
 
 
