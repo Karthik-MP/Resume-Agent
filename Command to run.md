@@ -1,0 +1,1 @@
+python ./tailor.py --jd ./jd.txt --resume_dir ./SWE_Resume_Template/ --profile ./profile.json --out_dir ./output/ --out_pdf ./output/final.pdf --company AIHL(Biotech & Life Sciences)

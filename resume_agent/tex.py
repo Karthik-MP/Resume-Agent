@@ -37,21 +37,20 @@ def generate_diff(original_text, new_text):
 def load_template(template_name, resume_root_dir):
     """
     Load a LaTeX template file from the templates directory.
-    
+
     Args:
         template_name: Name of the template file (e.g., 'skills_format.tex')
         resume_root_dir: Root directory of the resume template
-        
+
     Returns:
         Template content as a string
-        
+
     Raises:
         FileNotFoundError: If template file doesn't exist
     """
     template_path = os.path.join(resume_root_dir, "templates", template_name)
     if not os.path.exists(template_path):
         raise FileNotFoundError(f"Template not found: {template_path}")
-    
+
     with open(template_path, "r", encoding="utf-8") as f:
         return f.read()
-

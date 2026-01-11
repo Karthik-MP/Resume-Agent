@@ -1,52 +1,48 @@
-Jr Utility Data Analyst 
+Software Engineering Intern (Paid, In-Office) - NYC - Start Mid-January
 
-Be part of the team which has delivered over $600 Million dollars in refunds and savings to clients, and join us as we march toward One Billion dollars!
+Company: ConveyThis (Website Translation Software)
+Location: New York City (in-office only; no remote)
+Start: Mid-January (3-month program)
+Schedule: Monday-Friday, 40 hours/week
+Openings: 2-3 paid internships
+Stack: PHP, Laravel, MySQL, JavaScript
 
-UtiliSave is seeking qualified candidates for Junior Data Analyst position. This is a business critical hands-on role and the ideal candidate should have a record of success in undertaking data management and organization, cost analysis, analysis of complicated rules, and identifying cases, opportunities and solutions on behalf of our clients. This position interfaces directly with customers and regulated and unregulated utilities, so strong communication, presentation and client management skills are essential. Previous familiarity with utility regulations, rates and billing is a plus.
+About ConveyThis
+ConveyThis builds software that helps businesses translate and localize their websites quickly and accurately. We are a fast-moving product team working on real production systems used by customers globally.
 
- 
+The Internship
+We are hiring 2-3 Software Engineering Interns to join our NYC office starting mid-January for 3 months (full-time, 40 hrs/week). This internship is hands-on: you will work on real features and fixes in our Laravel/PHP backend and JavaScript frontend. Your work can ship to production with support from the team through code review and a safe release process.
 
-Responsibilities
+What You Will Work On
 
-Apply your analytical and programming (we are focused on Python and  SQL) skills and general business knowledge to identify and implement cost savings opportunities for clients.
-Using UtiliSave’s proprietary software applications, conduct financial, utility and business analysis of clients’ utility spends, and initiate action to obtain cost savings or recovery for clients.
-Interface with clients, utility companies, tax authorities, regulatory authorities and government agencies to obtain appropriate information to successfully implement savings opportunities.
-Match details in complex utility tariff codes against our clients’ usage and practices to identify new savings.
-Experienced working knowledge of Python and sql, are required
-Preferred: 1-2 years of work experience 
+Build and improve product features in Laravel (PHP)
+Work with MySQL (schema design, migrations, query basics)
+Fix bugs from real customer reports and improve reliability
+Write clean, maintainable code and participate in code reviews
+Contribute to releases that reach production (with guidance and guardrails)
+Collaborate daily with engineering/product in the office
+What We Are Looking For
 
-Better still : Relevant auditing or analyst role.
+Current student (BS/MS) in CS/Engineering or equivalent experience
+Comfortable coding in PHP and/or JavaScript (you will learn the rest quickly)
+Solid fundamentals: web basics (HTTP), databases, and debugging
+Ownership mindset: you follow things through and communicate clearly
+Able to work in-person in NYC Monday-Friday (40 hours/week) for the full term
+Nice to Have (Not Required)
 
-Deep knowledge of Utility tariffs in any of the States in America is a plus.
-The ability to grasp and explain technical and legal concepts and business issues is a requirement.
-Strong oral and written communication skills, and the demonstrated ability to negotiate and influence decision makers, are required.
-Previous experience working with or for a regulated public utility, especially dealing with rate billing analysis and customer interaction, would be a strong plus.
-College degree in Math, Engineering, Technology or Sciences major preferred.
-Able to independently solve problems and think creatively an imperative
- 
+Prior Laravel experience (projects, class, open source)
+Git/GitHub workflow familiarity (PRs, reviews, branching)
+Exposure to testing, queues/jobs, caching, or performance profiling
+Interest in SaaS products, i18n/localization, or developer tools
+How to Apply
 
-Ability to prioritize, work efficiently and meet deadlines
-Job Type: Full-time
 
-Salary: From $45,000.00 per year ($5,000 increase after training completion/based on successful production) plus incentive commissions for successful recoveries. 
+Please submit:
 
-Benefits:
-
-401(k)
-401(k) matching
-Dental insurance
-Health insurance
-Life insurance
-Paid time off
-Professional development assistance
-Vision insurance
-Compensation package:
-
-Yearly pay
-Experience level:
-
-1 year
-Schedule:
-
-Monday to Friday 9am – 6pm EST
-Work Location: Remote  
+Resume
+GitHub/portfolio (if available)
+A short note (3-8 sentences) answering:
+What project are you most proud of and what did you personally build?
+What is a bug you solved and how did you debug it?
+Confirm you can work in-office in NYC, Monday-Friday, 40 hrs/week, starting mid-January.
+ConveyThis is an equal opportunity employer.

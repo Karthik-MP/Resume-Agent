@@ -30,71 +30,87 @@ def get_llm():
     """
     Get the configured LLM model (singleton pattern).
     Uses settings from environment variables or .env file.
+    Supports multiple providers: OpenAI, Custom, and Gemini (future).
     """
     global _llm_instance
-    
+
     if _llm_instance is None:
+        # Validate settings
+        settings.validate()
+
+        provider = settings.LLM_PROVIDER
+
+        if provider == "gemini":
+            raise NotImplementedError(
+                "Gemini provider is not yet implemented. "
+                "Please use 'openai' or 'custom' provider for now."
+            )
+
+        # For OpenAI and Custom providers, use ChatOpenAI client
         if ChatOpenAI is None:
             raise ImportError(
                 "langchain-openai not installed. "
                 "Install it with: pip install langchain-openai"
             )
-        
-        # Validate settings
-        settings.validate()
-        
-        logger.info(f"Initializing LLM: model={settings.OPENAI_MODEL}, "
-                   f"base_url={settings.OPENAI_BASE_URL}, "
-                   f"temperature={settings.LLM_TEMPERATURE}")
-        
+
+        api_key = settings.get_active_api_key()
+        base_url = settings.get_active_base_url()
+        model = settings.get_active_model()
+
+        logger.info(
+            f"Initializing LLM: provider={provider}, model={model}, "
+            f"base_url={base_url}, temperature={settings.LLM_TEMPERATURE}"
+        )
+
         _llm_instance = ChatOpenAI(
-            model=settings.OPENAI_MODEL,
-            base_url=settings.OPENAI_BASE_URL,
-            api_key=settings.OPENAI_API_KEY,
+            model=model,
+            base_url=base_url,
+            api_key=api_key,
             temperature=settings.LLM_TEMPERATURE,
             max_tokens=settings.LLM_MAX_TOKENS,
-            timeout=settings.LLM_TIMEOUT
+            timeout=settings.LLM_TIMEOUT,
         )
-    
+
     return _llm_instance
 
 
 def call_llm(system_prompt: str, user_prompt: str) -> str:
     """
     Call LLM with system and user prompts.
-    
+
     Args:
         system_prompt: System instruction for the LLM
         user_prompt: User message/query
-        
+
     Returns:
         LLM response as string
-        
+
     Raises:
         ValueError: If API key is not configured
         Exception: If LLM call fails
     """
     try:
         llm = get_llm()
-        
+
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
+            {"role": "user", "content": user_prompt},
         ]
-        
-        logger.debug(f"Calling LLM with system prompt length: {len(system_prompt)}, "
-                    f"user prompt length: {len(user_prompt)}")
-        
+
+        logger.debug(
+            f"Calling LLM with system prompt length: {len(system_prompt)}, "
+            f"user prompt length: {len(user_prompt)}"
+        )
+
         response = llm.invoke(messages)
-        
+
         logger.debug(f"LLM response length: {len(response.content)}")
-        
+
         return response.content
-        
+
     except Exception as e:
         logger.error(f"LLM call failed: {e}")
         raise
-
 
 
 def web_search(query: str, max_results: int = 5):

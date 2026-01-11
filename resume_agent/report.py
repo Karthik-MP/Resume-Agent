@@ -1,6 +1,4 @@
 # resume_agent/report.py
-import os
-
 
 def generate_report(state):
     lines = []
