@@ -2,7 +2,6 @@
 #!/usr/bin/env python3
 import argparse
 import os
-import sys
 import logging
 from resume_agent.graph import build_graph, TailorState
 
@@ -49,14 +48,24 @@ def main():
     parser.add_argument(
         "--out_pdf",
         dest="out_pdf",
-        required=True,
-        help="Output path for compiled PDF resume",
+        required=False,
+        default=None,
+        help="Output path for compiled PDF resume (will be auto-generated if not provided)",
     )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
     logger.info("Starting resume tailoring agent")
+
+    # Set default output_pdf_path if not provided
+    if args.out_pdf is None:
+        # Create Resume directory at current working directory (not inside output dir which gets cleared)
+        resume_dir = os.path.join(os.getcwd(), "Resume")
+        os.makedirs(resume_dir, exist_ok=True)
+        args.out_pdf = os.path.join(
+            resume_dir, "resume.pdf"
+        )  # Placeholder, will be renamed dynamically
 
     # Initialize state
     state = TailorState(
