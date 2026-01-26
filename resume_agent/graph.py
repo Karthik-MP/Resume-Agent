@@ -63,6 +63,8 @@ def analyze_jd(state: TailorState) -> dict:
     # Use LLM to extract title and keywords (placeholder logic)
     lines = state.job_description.splitlines()
     title = lines[0] if lines else ""
+    # len(words) > 4 to filter out short/common words such as "the", "and", etc.
+    # instead of this create file with these words and load from there
     keywords = list(
         {word.strip(".,()") for word in state.job_description.split() if len(word) > 4}
     )
@@ -87,6 +89,8 @@ def infer_company_and_research(state: TailorState) -> dict:
             citations.extend(search_res["sources"])
     else:
         summary = str(search_res)
+    # logger.info(f"Company research summary: {summary[:200]}...")
+    # logger.info(f"Citations: {citations}")
     return {"company_summary": summary, "citations": citations}
 
 
