@@ -12,6 +12,162 @@ from resume_agent import tools, tex, profile, report, prompts, compile as compil
 logger = logging.getLogger(__name__)
 
 
+def generate_heading_tex(user_data: dict, resume_root_dir: str) -> str:
+    """
+    Generate heading.tex from Firebase user data using template
+    
+    Args:
+        user_data: Dictionary containing user information from Firebase
+        resume_root_dir: Path to resume template directory
+        
+    Returns:
+        LaTeX string for heading section with placeholders replaced
+    """
+    try:
+        # Load heading template
+        heading_template = tex.load_template("heading_format.tex", resume_root_dir)
+    except FileNotFoundError:
+        logger.warning("heading_format.tex template not found, using default structure")
+        heading_template = "%----------HEADING----------%\n\\begin{center}\n    \\textbf{\\Huge \\scshape {{NAME}}} \\\\ \\vspace{1pt}\n    \\seticon{faMapMarker} \\ \\small {{LOCATION}} \\quad\n    \\seticon{faPhone} \\ \\small {{PHONE}} \\quad\n    \\href{mailto:{{EMAIL}}}{\\seticon{faEnvelope} {{EMAIL}}} \\quad\n    \\href{{{LINKEDIN_URL}}}{\\seticon{faLinkedin} {{LINKEDIN_USERNAME}}} \\quad\n    \\href{{{GITHUB_URL}}}{\\seticon{faGithub} {{GITHUB_USERNAME}}} \\quad\n    \\href{{{WEBSITE}}}{\\seticon{faGlobe} {{WEBSITE_DISPLAY}}} \\quad\n\\end{center}\n"
+    
+    # Extract user information
+    name = user_data.get("name", "")
+    location = user_data.get("location", "")
+    phone = user_data.get("phone_number", "")
+    email = user_data.get("email", "")
+    linkedin = user_data.get("linkedin", "")
+    github = user_data.get("github", "")
+    website = user_data.get("website", "")
+    
+    # Process LinkedIn
+    linkedin_username = linkedin.split("/")[-1] if "/" in linkedin else linkedin
+    linkedin_url = linkedin if linkedin.startswith("http") else f"https://www.linkedin.com/in/{linkedin}"
+    
+    # Process GitHub
+    github_username = github.split("/")[-1] if "/" in github else github
+    github_url = github if github.startswith("http") else f"https://github.com/{github}"
+    
+    # Process Website
+    website_display = website.replace("https://", "").replace("http://", "").replace("www.", "").rstrip("/")
+    
+    # Start with template
+    heading_content = heading_template
+    
+    # Replace placeholders
+    heading_content = heading_content.replace("{{NAME}}", name)
+    
+    # Remove lines with empty values using regex
+    import re
+    
+    # If location is empty, remove its line
+    if not location:
+        heading_content = re.sub(r'\s*\\seticon\{faMapMarker\}[^\n]*{{LOCATION}}[^\n]*\n?', '', heading_content)
+    heading_content = heading_content.replace("{{LOCATION}}", location)
+    
+    # If phone is empty, remove its line
+    if not phone:
+        heading_content = re.sub(r'\s*\\seticon\{faPhone\}[^\n]*{{PHONE}}[^\n]*\n?', '', heading_content)
+    heading_content = heading_content.replace("{{PHONE}}", phone)
+    
+    # If email is empty, remove its line
+    if not email:
+        heading_content = re.sub(r'\s*\\href\{mailto:{{EMAIL}}\}[^\n]*\n?', '', heading_content)
+    heading_content = heading_content.replace("{{EMAIL}}", email)
+    
+    # If linkedin is empty, remove its line
+    if not linkedin:
+        heading_content = re.sub(r'\s*\\href\{{{LINKEDIN_URL}}\}[^\n]*\n?', '', heading_content)
+    heading_content = heading_content.replace("{{LINKEDIN_URL}}", linkedin_url)
+    heading_content = heading_content.replace("{{LINKEDIN_USERNAME}}", linkedin_username)
+    
+    # If github is empty, remove its line
+    if not github:
+        heading_content = re.sub(r'\s*\\href\{{{GITHUB_URL}}\}[^\n]*\n?', '', heading_content)
+    heading_content = heading_content.replace("{{GITHUB_URL}}", github_url)
+    heading_content = heading_content.replace("{{GITHUB_USERNAME}}", github_username)
+    
+    # If website is empty, remove its line
+    if not website:
+        heading_content = re.sub(r'\s*\\href\{{{WEBSITE}}\}[^\n]*\n?', '', heading_content)
+    heading_content = heading_content.replace("{{WEBSITE}}", website)
+    heading_content = heading_content.replace("{{WEBSITE_DISPLAY}}", website_display)
+    
+    return heading_content
+
+
+def generate_education_tex(user_data: dict, resume_root_dir: str) -> str:
+    """
+    Generate education.tex from Firebase user data using template
+    
+    Args:
+        user_data: Dictionary containing user information from Firebase
+        resume_root_dir: Path to resume template directory
+        
+    Returns:
+        LaTeX string for education section with placeholders replaced
+    """
+    try:
+        # Load education template
+        education_template = tex.load_template("education_format.tex", resume_root_dir)
+    except FileNotFoundError:
+        logger.warning("education_format.tex template not found, using default structure")
+        education_template = "%-----------EDUCATION-----------%\n\\section{Education}\n    \\resumeSubHeadingListStart\n\n    \\resumeSubheading\n    {{{GRAD_SCHOOL}}}{{{GRAD_DATE}}}\n    {{{GRAD_DEGREE}}}{{{GRAD_GPA}}}\n    \\resumeItemListStart\n        \\resumeItem{\\textbf{Relevant Coursework:}  {{GRAD_COURSEWORK}}.}\n    \\resumeItemListEnd\n    \\resumeSubheading\n    {{{UNDERGRAD_SCHOOL}}}{{{UNDERGRAD_DATE}}}\n    {{{UNDERGRAD_DEGREE}}}{{{UNDERGRAD_GPA}}}\n\n    \\resumeSubHeadingListEnd\n"
+    
+    education_data = user_data.get("Education", {})
+    
+    # Graduate education
+    graduate = education_data.get("graduate", {})
+    grad_school = graduate.get("school_name", "")
+    grad_degree = graduate.get("course_name", "")
+    grad_date = graduate.get("graduation_date", "")
+    grad_grades = graduate.get("grades", {})
+    grad_gpa = f"GPA: {grad_grades.get('gpa', '')} / {grad_grades.get('max_total', '')}" if grad_grades.get('gpa') and grad_grades.get('max_total') else ""
+    grad_coursework = graduate.get("relevant_coursework", "")
+    
+    # Undergraduate education
+    undergraduate = education_data.get("undergraduate", {})
+    undergrad_school = undergraduate.get("school_name", "")
+    undergrad_degree = undergraduate.get("course_name", "")
+    undergrad_date = undergraduate.get("graduation_date", "")
+    undergrad_grades = undergraduate.get("grades", {})
+    undergrad_gpa = f"GPA: {undergrad_grades.get('gpa', '')} / {undergrad_grades.get('max_total', '')}" if undergrad_grades.get('gpa') and undergrad_grades.get('max_total') else ""
+    
+    # Check if undergraduate data exists
+    has_undergrad = undergrad_school and undergrad_degree
+    
+    # Build education content based on available data
+    if has_undergrad:
+        # Use full template with both graduate and undergraduate
+        education_content = education_template
+        education_content = education_content.replace("{{GRAD_SCHOOL}}", grad_school)
+        education_content = education_content.replace("{{GRAD_DEGREE}}", grad_degree)
+        education_content = education_content.replace("{{GRAD_DATE}}", grad_date)
+        education_content = education_content.replace("{{GRAD_GPA}}", grad_gpa)
+        education_content = education_content.replace("{{GRAD_COURSEWORK}}", grad_coursework)
+        education_content = education_content.replace("{{UNDERGRAD_SCHOOL}}", undergrad_school)
+        education_content = education_content.replace("{{UNDERGRAD_DEGREE}}", undergrad_degree)
+        education_content = education_content.replace("{{UNDERGRAD_DATE}}", undergrad_date)
+        education_content = education_content.replace("{{UNDERGRAD_GPA}}", undergrad_gpa)
+    else:
+        # Only graduate education - remove undergraduate section using regex
+        import re
+        # Remove the entire undergraduate resumeSubheading block
+        education_content = re.sub(
+            r'\\resumeSubheading\s*\{\{\{UNDERGRAD_SCHOOL\}\}\}.*?(?=\\resumeSubHeadingListEnd)',
+            '',
+            education_template,
+            flags=re.DOTALL
+        )
+        # Replace graduate placeholders
+        education_content = education_content.replace("{{GRAD_SCHOOL}}", grad_school)
+        education_content = education_content.replace("{{GRAD_DEGREE}}", grad_degree)
+        education_content = education_content.replace("{{GRAD_DATE}}", grad_date)
+        education_content = education_content.replace("{{GRAD_GPA}}", grad_gpa)
+        education_content = education_content.replace("{{GRAD_COURSEWORK}}", grad_coursework)
+    
+    return education_content
+
+
 class TailorState(BaseModel):
     job_description_path: str
     job_url: Optional[str] = None
@@ -29,6 +185,7 @@ class TailorState(BaseModel):
     main_tex: Optional[str] = None  # ✅ ADD THIS
 
     profile_data: Optional[dict] = None
+    user_data: Optional[dict] = None  # Firebase user data
     company_summary: Optional[str] = None
     citations: Optional[list[str]] = None
     plan: Optional[dict] = None
@@ -378,6 +535,36 @@ def apply_edits(state: TailorState) -> dict:
         os.makedirs(os.path.dirname(dst_path), exist_ok=True)
         with open(dst_path, "w", encoding="utf-8") as f:
             f.write(content)
+
+    # ---------- GENERATE HEADING FROM FIREBASE USER DATA ----------
+    if state.user_data:
+        logger.info("Generating heading.tex from Firebase user data")
+        heading_content = generate_heading_tex(state.user_data, state.resume_root_dir)
+        
+        # Find heading file and update it
+        for rel, content in state.resume_files.items():
+            if "heading" in rel.lower() and rel.endswith(".tex"):
+                heading_path = os.path.join(state.output_dir, rel)
+                with open(heading_path, "w", encoding="utf-8") as f:
+                    f.write(heading_content)
+                logger.info(f"✓ Updated {rel} with Firebase user data")
+                state.resume_files[rel] = heading_content
+                break
+    
+    # ---------- GENERATE EDUCATION FROM FIREBASE USER DATA ----------
+    if state.user_data:
+        logger.info("Generating education.tex from Firebase user data")
+        education_content = generate_education_tex(state.user_data, state.resume_root_dir)
+        
+        # Find education file and update it
+        for rel, content in state.resume_files.items():
+            if "education" in rel.lower() and rel.endswith(".tex"):
+                education_path = os.path.join(state.output_dir, rel)
+                with open(education_path, "w", encoding="utf-8") as f:
+                    f.write(education_content)
+                logger.info(f"✓ Updated {rel} with Firebase user data")
+                state.resume_files[rel] = education_content
+                break
 
     # ---------- SKILLS (LLM-GENERATED FROM TEMPLATE) ----------
     for rel, content in state.resume_files.items():

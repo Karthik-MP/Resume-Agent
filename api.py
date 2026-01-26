@@ -229,6 +229,21 @@ async def generate_resume(
         job_id = str(uuid.uuid4())
         logger.info(f"✓ Job ID: {job_id}")
 
+        # Fetch user data from Firestore
+        user_data = None
+        if db:
+            try:
+                logger.info(f"Fetching user data from Firestore for user: {authenticated_user_id}")
+                user_doc = db.collection("users").document(authenticated_user_id).get()
+                if user_doc.exists:
+                    user_data = user_doc.to_dict()
+                    logger.info("✓ User data fetched successfully")
+                else:
+                    logger.warning(f"User document not found for user: {authenticated_user_id}")
+            except Exception as e:
+                logger.error(f"Error fetching user data from Firestore: {str(e)}")
+                # Continue without user data - will fall back to profile.json
+
         # Only generate resume for now (cover letter and email will be implemented later)
         if request.generate_resume:
             logger.info("Starting resume generation...")
@@ -304,6 +319,7 @@ async def generate_resume(
                     profile_json_path=profile_path,
                     output_dir=output_dir,
                     output_pdf_path=os.path.join(output_dir, "resume.pdf"),
+                    user_data=user_data,  # Pass Firebase user data
                 )
 
                 graph = build_graph()
