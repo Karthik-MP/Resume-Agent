@@ -11,6 +11,113 @@ from resume_agent import tools, tex, profile, report, prompts, compile as compil
 
 logger = logging.getLogger(__name__)
 
+# Framework to programming language mapping
+FRAMEWORK_TO_LANGUAGE = {
+    "spring boot": "Java",
+    "spring": "Java",
+    "jakarta ee": "Java",
+    "hibernate": "Java",
+    "django": "Python",
+    "flask": "Python",
+    "fastapi": "Python",
+    "express": "JavaScript",
+    "express.js": "JavaScript",
+    "react": "JavaScript",
+    "react.js": "JavaScript",
+    "next.js": "JavaScript",
+    "vue": "JavaScript",
+    "vue.js": "JavaScript",
+    "angular": "JavaScript",
+    "node.js": "JavaScript",
+    "nodejs": "JavaScript",
+    ".net": "C#",
+    "asp.net": "C#",
+    "rails": "Ruby",
+    "ruby on rails": "Ruby",
+    "laravel": "PHP",
+    "symfony": "PHP",
+}
+
+
+def get_required_languages(skills_text: str, jd_text: str) -> set:
+    """
+    Determine which programming languages should be included based on
+    frameworks/technologies mentioned in skills or job description.
+    """
+    required_langs = set()
+    combined_text = (skills_text + " " + jd_text).lower()
+    
+    for framework, language in FRAMEWORK_TO_LANGUAGE.items():
+        if framework in combined_text:
+            required_langs.add(language)
+    
+    return required_langs
+
+
+def extract_experience_skills(resume_files: Dict[str, str]) -> set:
+    """
+    Extract technology keywords from the Experience section of resume LaTeX files.
+    Returns a set of lowercase skill names found in experience bullets.
+    """
+    experience_skills = set()
+    
+    # Common technology keywords to look for (synced with profile.json)
+    tech_keywords = [
+        # Languages
+        'python', 'java', 'javascript', 'typescript', 'sql', 'go', 'rust', 'kotlin', 'swift', 'c#', 'ruby', 'php',
+        # Web & Backend
+        'react', 'react.js', 'next.js', 'node.js', 'nodejs', 'express', 'express.js',
+        'spring boot', 'spring batch', 'spring', 'spring security', 'spring data jpa',
+        'fastapi', 'flask', 'django', 'html5', 'css3', 'tailwind css', 'tailwind', 'redux', 'axios', 'uvicorn',
+        'tanstack react query', 'jwt', 'rest api', 'rest apis', 'websockets', 'microservices', 'xml',
+        '.net', 'asp.net', 'laravel', 'rails', 'angular', 'vue', 'vue.js', 'graphql',
+        # Data Science & ML
+        'numpy', 'pandas', 'scikit-learn', 'sklearn', 'tensorflow', 'pytorch', 'seaborn', 'matplotlib',
+        'opencv', 'time series analysis', 'geospatial analysis', 'data cleaning', 'exploratory data analysis',
+        'data ethics', 'jupyter notebook', 'jupyter', 'lstm', 'random forest', 'decision trees',
+        'wordcloud', 'spacy', 'nltk',
+        # Databases
+        'mysql', 'postgresql', 'postgres', 'mongodb', 'oracle', 'oracle db', 'nosql', 'timescaledb',
+        'psycopg2', 'neo4j', 'cassandra', 'elasticsearch', 'sql server', 'redis', 'dynamodb',
+        # Cloud & DevOps
+        'aws', 'azure', 'gcp', 'google cloud platform', 'google cloud', 'docker', 'kubernetes', 'k8s',
+        'ci/cd', 'cicd', 'jenkins', 'firebase', 'gitlab', 'github actions', 'terraform', 'ansible',
+        # Tools & Technologies
+        'git', 'github', 'linux', 'unix', 'postman', 'junit', 'adobe analytics', 'aem', 'aem cloud',
+        'power bi', 'tableau', 'faktory', 'sqlx', 'google perspective api', 'perspective api',
+        'react simple maps', 'copilotkit', 'langchain', 'llamaindex', 'maven',
+        'openai', 'llm', 'llms', 'rag', 'vector database', 'etl', 'kafka', 'rabbitmq',
+        'bootstrap', 'material-ui', 'json', 'yaml',
+    ]
+    
+    # Search through all resume files for experience section
+    for rel_path, content in resume_files.items():
+        # Look for experience section
+        if '\\section{Experience}' in content or '\\section{Work Experience}' in content:
+            # Extract content between Experience section and next section
+            experience_match = re.search(
+                r'\\section\{(?:Work )?Experience\}(.*?)(?:\\section|\\end\{document\}|$)',
+                content,
+                re.DOTALL
+            )
+            
+            if experience_match:
+                experience_text = experience_match.group(1).lower()
+                
+                # Find all technology keywords mentioned
+                for keyword in tech_keywords:
+                    # Use word boundaries to avoid partial matches
+                    if re.search(r'\b' + re.escape(keyword.lower()) + r'\b', experience_text):
+                        experience_skills.add(keyword.lower())
+    
+    logger.info(f"Extracted {len(experience_skills)} skills from Experience section: {sorted(experience_skills)}")
+    return experience_skills
+
+
+class LLMQuotaExceededError(Exception):
+    """Custom exception for LLM quota/rate limit errors."""
+    pass
+
 
 class TailorState(BaseModel):
     job_description_path: str
@@ -36,6 +143,8 @@ class TailorState(BaseModel):
     verification: list[str] = []
     compile_logs: Optional[str] = None
     report_md: Optional[str] = None
+    error_status: Optional[str] = None  # Track error state
+    rate_limit_count: int = 0  # Track consecutive rate limit errors
 
 
 def load_inputs(state: TailorState) -> dict:
@@ -202,6 +311,8 @@ def plan_edits(state: TailorState) -> dict:
 
             # Clean response - remove markdown code blocks if present
             response_clean = response.strip()
+            logger.debug(f"Project scoring response: {response_clean}")
+            
             if response_clean.startswith("```"):
                 lines = response_clean.split("\n")
                 if lines[0].startswith("```"):
@@ -210,7 +321,27 @@ def plan_edits(state: TailorState) -> dict:
                     lines = lines[:-1]
                 response_clean = "\n".join(lines).strip()
 
-            results = json.loads(response_clean)
+            # Try to parse JSON with error handling
+            try:
+                results = json.loads(response_clean)
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON decode error in project scoring: {e}")
+                logger.error(f"Problematic response: {response_clean}")
+                
+                # Try to fix truncated JSON
+                if response_clean.count("[") > response_clean.count("]"):
+                    response_clean += "]" * (response_clean.count("[") - response_clean.count("]"))
+                if response_clean.count("{") > response_clean.count("}"):
+                    response_clean += "}" * (response_clean.count("{") - response_clean.count("}"))
+                if response_clean.count('"') % 2 != 0:
+                    response_clean += '"'
+                
+                try:
+                    results = json.loads(response_clean)
+                    logger.info("Successfully parsed JSON after fixes")
+                except json.JSONDecodeError:
+                    logger.error("Cannot parse JSON even after fixes. Using fallback.")
+                    raise ValueError(f"Invalid JSON from LLM: {e}")
 
             # Handle if results is not a list
             if not isinstance(results, list):
@@ -242,6 +373,14 @@ def plan_edits(state: TailorState) -> dict:
                         break
 
         except Exception as e:
+            error_msg = str(e)
+            
+            # Check if this is a rate limit error - stop immediately
+            if "RATE_LIMIT_EXCEEDED" in error_msg or "429" in error_msg:
+                logger.error(f"Rate limit exceeded during project scoring. Stopping process.")
+                state.error_status = f"ERROR: Rate limit exceeded. {error_msg}"
+                raise Exception(f"RATE_LIMIT_EXCEEDED: Stopping due to repeated rate limit errors")
+            
             logger.warning(
                 f"Failed to score projects with LLM: {e}. Response snippet: {response[:200] if 'response' in locals() else 'N/A'}"
             )
@@ -252,7 +391,11 @@ def plan_edits(state: TailorState) -> dict:
     relevant_projects.sort(reverse=True, key=lambda x: x[0])
     selected_projects = [p for _, p in relevant_projects[:2]]
 
-    # ---- 2. Collect skills ONLY that are relevant to JD ----
+    # ---- 2. Extract skills from existing resume Experience section ----
+    experience_skills = extract_experience_skills(state.resume_files or {})
+    logger.info(f"DEBUG: Extracted {len(experience_skills)} skills from Experience: {sorted(experience_skills)}")
+
+    # ---- 3. Collect skills from JD, selected projects, and experience ----
     # Map profile categories to output categories
     category_mapping = {
         "Languages": "Languages",
@@ -278,6 +421,7 @@ def plan_edits(state: TailorState) -> dict:
     try:
         # Prepare data for LLM
         projects_tech_str = ", ".join(sorted(project_tech))
+        experience_skills_str = ", ".join(sorted(experience_skills))
         all_skills_str = ""
         for category, skills in profile_skills.items():
             all_skills_str += f"{category}: {', '.join(skills)}\n"
@@ -285,6 +429,7 @@ def plan_edits(state: TailorState) -> dict:
         user_prompt = prompts.FILTER_SKILLS_USER.format(
             job_description=state.job_description or "",
             selected_projects_tech=projects_tech_str,
+            experience_skills=experience_skills_str,
             all_skills=all_skills_str,
         )
 
@@ -302,8 +447,10 @@ def plan_edits(state: TailorState) -> dict:
             logger.warning("Empty response from LLM for skills filtering")
             raise ValueError("Empty LLM response")
 
-        logger.debug(f"Skills LLM response (first 200 chars): {response_clean[:200]}")
+        logger.info(f"DEBUG: LLM raw response length: {len(response_clean)} chars")
+        logger.debug(f"Skills LLM response: {response_clean}")
 
+        # Clean markdown code blocks if present
         if response_clean.startswith("```"):
             lines = response_clean.split("\n")
             if lines[0].startswith("```"):
@@ -312,44 +459,133 @@ def plan_edits(state: TailorState) -> dict:
                 lines = lines[:-1]
             response_clean = "\n".join(lines).strip()
 
-        selected_skills = json.loads(response_clean)
+        # Try to parse JSON with better error handling
+        try:
+            selected_skills = json.loads(response_clean)
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON decode error: {e}")
+            logger.error(f"Problematic response: {response_clean}")
+            
+            # Try to fix common JSON issues
+            # 1. Try to complete truncated JSON arrays
+            if response_clean.count("[") > response_clean.count("]"):
+                logger.warning("Attempting to fix incomplete JSON arrays")
+                response_clean += "]" * (response_clean.count("[") - response_clean.count("]"))
+            
+            # 2. Try to complete truncated JSON objects
+            if response_clean.count("{") > response_clean.count("}"):
+                logger.warning("Attempting to fix incomplete JSON objects")
+                response_clean += "}" * (response_clean.count("{") - response_clean.count("}"))
+            
+            # 3. Try to close unterminated strings
+            if response_clean.count('"') % 2 != 0:
+                logger.warning("Attempting to fix unterminated string")
+                response_clean += '"'
+            
+            # Try parsing again after fixes
+            try:
+                selected_skills = json.loads(response_clean)
+                logger.info("Successfully parsed JSON after fixes")
+            except json.JSONDecodeError as e2:
+                logger.error(f"Still cannot parse JSON after fixes: {e2}")
+                raise ValueError(f"Invalid JSON from LLM: {e2}")
 
-        # Map to output categories and limit to 7-10 per category
+        logger.info(f"DEBUG: LLM returned skills for {len(selected_skills)} categories")
+        for cat, skills in selected_skills.items():
+            logger.info(f"DEBUG: LLM category '{cat}': {len(skills)} skills = {skills}")
+
+        # Map to output categories and limit to 10-15 per category
         for category, skills in selected_skills.items():
             mapped_category = category_mapping.get(category)
             if mapped_category and skills:
-                # Limit to top 10 skills per category
-                skills_by_category[mapped_category].update(skills[:10])
+                # Limit to top 15 skills per category
+                skills_by_category[mapped_category].update(skills[:15])
+                logger.info(f"DEBUG: Mapped '{category}' -> '{mapped_category}': added {len(skills[:15])} skills")
 
         logger.info("Skills filtered using LLM")
+        logger.info(f"DEBUG: skills_by_category after LLM: {dict((k, sorted(v)) for k, v in skills_by_category.items())}")
+        
+        # CRITICAL: Force-add ALL experience skills that LLM may have missed
+        # Match experience skills to profile and add them
+        logger.info(f"DEBUG: Starting force-add of {len(experience_skills)} experience skills...")
+        added_count = 0
+        for exp_skill in experience_skills:
+            found = False
+            exp_skill_lower = exp_skill.lower().strip()
+            
+            # Try to find this skill in the profile with fuzzy matching
+            for category, profile_skill_list in profile_skills.items():
+                for profile_skill in profile_skill_list:
+                    profile_skill_lower = profile_skill.lower().strip()
+                    
+                    # Match if: exact match, one contains the other, or very similar
+                    is_match = (
+                        exp_skill_lower == profile_skill_lower or
+                        exp_skill_lower in profile_skill_lower or
+                        profile_skill_lower in exp_skill_lower or
+                        # Handle cases like "react" vs "react.js"
+                        exp_skill_lower.replace('.', '') == profile_skill_lower.replace('.', '') or
+                        # Handle "spring boot" vs "spring"
+                        (exp_skill_lower.split()[0] == profile_skill_lower.split()[0] and len(exp_skill_lower.split()[0]) > 3)
+                    )
+                    
+                    if is_match:
+                        mapped_category = category_mapping.get(category)
+                        if mapped_category:
+                            if profile_skill not in skills_by_category.get(mapped_category, set()):
+                                skills_by_category[mapped_category].add(profile_skill)
+                                logger.info(f"DEBUG: Force-added '{profile_skill}' to {mapped_category} (matched '{exp_skill}')")
+                                added_count += 1
+                            else:
+                                logger.debug(f"DEBUG: '{profile_skill}' already in {mapped_category}")
+                        else:
+                            logger.warning(f"DEBUG: No mapping for category '{category}' containing '{profile_skill}'")
+                        found = True
+                        break
+                if found:
+                    break
+            if not found:
+                logger.warning(f"DEBUG: Experience skill '{exp_skill}' not found in profile skills")
+        
+        logger.info(f"DEBUG: Force-added {added_count} missing experience skills")
+        logger.info(f"DEBUG: skills_by_category after force-add: {dict((k, sorted(v)) for k, v in skills_by_category.items())}")
+        
+        # Ensure required languages are included based on frameworks
+        all_skills_text = " ".join(str(s) for skills in skills_by_category.values() for s in skills)
+        required_languages = get_required_languages(all_skills_text, jd_text_lower)
+        
+        for lang in required_languages:
+            if lang not in skills_by_category.get("Languages", set()):
+                # Check if language exists in profile
+                for category, skills in profile_skills.items():
+                    if lang in skills:
+                        skills_by_category["Languages"].add(lang)
+                        logger.info(f"DEBUG: Added {lang} to Languages (required by frameworks in JD/skills)")
+                        break
 
     except Exception as e:
-        logger.warning(
-            f"Failed to filter skills with LLM: {e}. Response: {response[:300] if 'response' in locals() else 'N/A'}. Using fallback method."
+        error_msg = str(e)
+        
+        # Check if this is a rate limit error - stop immediately
+        if "RATE_LIMIT_EXCEEDED" in error_msg or "429" in error_msg:
+            logger.error(f"Rate limit exceeded during skills filtering. Stopping process.")
+            state.error_status = f"ERROR: Rate limit exceeded. {error_msg}"
+            raise Exception(f"RATE_LIMIT_EXCEEDED: Stopping due to repeated rate limit errors")
+        
+        # For critical LLM failures, stop the process instead of using fallback
+        logger.error(
+            f"Failed to filter skills with LLM: {e}. Response: {response[:300] if 'response' in locals() else 'N/A'}."
         )
-        # Fallback: Include skills from projects + JD matches
-        for category, skills in profile_skills.items():
-            mapped_category = category_mapping.get(category)
-            if not mapped_category:
-                continue
+        logger.error("CRITICAL: Cannot generate appropriate resume without LLM. Stopping process.")
+        state.error_status = f"ERROR: LLM failure - {error_msg}"
+        raise Exception(f"LLM_FAILURE: Cannot filter skills appropriately. {error_msg}")
 
-            for skill in skills:
-                skill_lower = skill.lower()
-
-                # Include if: in project tech, in JD keywords, or exact match in JD
-                is_in_projects = skill_lower in project_tech
-                is_in_jd = any(
-                    keyword in skill_lower or skill_lower in keyword
-                    for keyword in jd_keywords
-                    if len(keyword) > 2
-                )
-                is_exact_match = skill_lower in jd_text_lower
-
-                if is_in_projects or is_in_jd or is_exact_match:
-                    skills_by_category[mapped_category].add(skill)
-
-    # Convert sets to sorted lists and limit to 10 per category
-    skills_by_category = {k: sorted(v)[:10] for k, v in skills_by_category.items() if v}
+    # Convert sets to sorted lists and limit to 15 per category
+    skills_by_category = {k: sorted(v)[:15] for k, v in skills_by_category.items() if v}
+    
+    logger.info(f"DEBUG: FINAL skills_by_category (limited to 15 each): {skills_by_category}")
+    for cat, skills in skills_by_category.items():
+        logger.info(f"DEBUG: FINAL {cat}: {len(skills)} skills = {skills}")
 
     # ---- 3. Add all certifications from profile ----
     certifications = profile_data.get("certifications", [])
@@ -371,6 +607,11 @@ def plan_edits(state: TailorState) -> dict:
 
 def apply_edits(state: TailorState) -> dict:
     logger.info("Applying edits to LaTeX files")
+
+    # Check if there was an error in previous steps
+    if state.error_status:
+        logger.error(f"Skipping apply_edits due to previous error: {state.error_status}")
+        return {}
 
     # --- Copy original files to output dir first ---
     for rel_path, content in state.resume_files.items():
@@ -398,12 +639,11 @@ def apply_edits(state: TailorState) -> dict:
             for category, skills in skills_by_category.items():
                 skills_data_str += f"{category}: {', '.join(skills)}\n"
 
-            # Get JD keywords
-            jd_keywords_str = ", ".join(state.jd_keywords or [])
+            logger.info(f"DEBUG: Sending {len(skills_by_category)} categories to skills generation LLM")
+            logger.info(f"DEBUG: Skills data being sent:\n{skills_data_str}")
 
             # Call LLM to generate skills LaTeX
             user_prompt = prompts.GENERATE_SKILLS_USER.format(
-                jd_keywords=jd_keywords_str,
                 skills_data=skills_data_str,
                 format_template=skills_template,
             )
@@ -412,48 +652,75 @@ def apply_edits(state: TailorState) -> dict:
                 system_prompt=prompts.GENERATE_SKILLS_SYSTEM, user_prompt=user_prompt
             )
 
+            logger.info(f"DEBUG: Generated skills LaTeX length: {len(generated_skills_latex)} chars")
+            logger.info(f"DEBUG: Generated skills LaTeX preview:\n{generated_skills_latex[:500]}")
+
             # Clean the output (remove any markdown code blocks if present)
             generated_skills_latex = generated_skills_latex.strip()
             if generated_skills_latex.startswith("```"):
                 lines = generated_skills_latex.split("\n")
                 # Remove first and last lines if they're code fence markers
                 if lines[0].startswith("```"):
-                    lines = lines[1:]
+                    lines = lines
                 if lines and lines[-1].startswith("```"):
                     lines = lines[:-1]
                 generated_skills_latex = "\n".join(lines)
 
+            logger.info(f"DEBUG: Cleaned skills LaTeX length: {len(generated_skills_latex)} chars")
+            
+            # Check if pattern exists in content before replacement
+            pattern = r"%-*PROGRAMMING SKILLS-*%\s*\\section\{Technical Skills\}.*?\\end\{itemize\}"
+            match = re.search(pattern, content, flags=re.DOTALL)
+            if match:
+                logger.info(f"DEBUG: Found existing skills section to replace (length: {len(match.group(0))} chars)")
+                logger.info(f"DEBUG: Existing skills preview: {match.group(0)[:200]}")
+            else:
+                logger.warning(f"DEBUG: Skills section pattern NOT FOUND in {rel}")
+                logger.warning(f"DEBUG: File content preview: {content[:500]}")
+
             # Replace the entire skills section
             # Use lambda to avoid backslash interpretation issues
             content = re.sub(
-                r"%-*PROGRAMMING SKILLS-*%\s*\\section\{Technical Skills\}.*?\\end\{itemize\}",
+                pattern,
                 lambda m: generated_skills_latex.strip(),
                 content,
                 flags=re.DOTALL,
             )
+            
+            logger.info(f"DEBUG: After replacement, checking if skills are in content...")
+            if "Java, JavaScript, Python, SQL, TypeScript" in content:
+                logger.info(f"DEBUG: ✓ Skills successfully replaced in content")
+            else:
+                logger.error(f"DEBUG: ✗ Skills NOT found in content after replacement!")
+                logger.error(f"DEBUG: Content around Technical Skills: {content[content.find('Technical Skills')-100:content.find('Technical Skills')+500] if 'Technical Skills' in content else 'NOT FOUND'}")
 
             state.changes.append(
                 "Generated skills section using LLM with custom template"
             )
 
         except Exception as e:
-            logger.warning(f"Failed to generate skills with LLM: {e}")
-            # Fallback to old method if LLM generation fails
-            skills_by_category = (state.plan or {}).get("skills_by_category", {})
-            content = replace_skill_category(
-                content, "Languages", skills_by_category.get("Languages", [])
-            )
-            content = replace_skill_category(
-                content, "Technologies", skills_by_category.get("Technologies", [])
-            )
-            content = replace_skill_category(
-                content, "Tools \\& Platforms", skills_by_category.get("Tools", [])
-            )
-            state.changes.append(
-                "Used fallback method for skills (LLM generation failed)"
-            )
+            error_msg = str(e)
+            
+            # Check if this is a rate limit error - stop immediately
+            if "RATE_LIMIT_EXCEEDED" in error_msg or "429" in error_msg:
+                logger.error(f"Rate limit exceeded during skills generation. Stopping process.")
+                state.error_status = f"ERROR: Rate limit exceeded. {error_msg}"
+                raise Exception(f"RATE_LIMIT_EXCEEDED: Stopping due to repeated rate limit errors")
+            
+            # Check if this is a quota exceeded error (not rate limit)
+            if "QUOTA_EXCEEDED" in error_msg or "insufficient_quota" in error_msg.lower() or "quota exceeded" in error_msg.lower():
+                logger.error(f"LLM quota exceeded: {e}")
+                state.error_status = f"ERROR: LLM API quota exhausted. {error_msg}"
+                raise LLMQuotaExceededError(f"LLM quota exceeded: {error_msg}")
+            
+            # For any other LLM failure, stop the process
+            logger.error(f"Failed to generate skills with LLM: {e}")
+            logger.error("CRITICAL: Cannot generate appropriate resume without LLM. Stopping process.")
+            state.error_status = f"ERROR: Skills generation failed - {error_msg}"
+            raise Exception(f"LLM_FAILURE: Cannot generate skills section. {error_msg}")
 
         state.resume_files[rel] = content
+        logger.info(f"DEBUG: Updated state.resume_files[{rel}] with new skills content")
 
     # ---------- PROJECTS (LLM-GENERATED FROM TEMPLATE) ----------
     for rel, content in state.resume_files.items():
@@ -537,51 +804,64 @@ def apply_edits(state: TailorState) -> dict:
                 )
 
         except Exception as e:
-            logger.warning(f"Failed to generate projects with LLM: {e}")
-            # Fallback to old method if LLM generation fails
-            selected_projects = state.plan.get("add_projects", [])[:2]
-            project_blocks = []
-
-            for proj in selected_projects:
-                name = proj["name"]
-                tech = ", ".join(proj.get("tech_stack", []))
-                used_verbs = set()
-                bullets = rewrite_star(proj, used_verbs)
-                bullet_tex = "\n".join(f"    \\resumeItem{{{b}}}" for b in bullets)
-
-                block = f"""
-            \\resumeProjectHeading
-            {{\\textbf{{{name}}} $|$ \\emph{{{tech}}}}}{{}}
-            \\resumeItemListStart
-            {bullet_tex}
-            \\resumeItemListEnd
-            """
-                project_blocks.append(block.strip())
-                state.changes.append(f"Selected project '{name}' (fallback method)")
-
-            new_projects_section = "\\section{Projects}\n\n" + "\n\n".join(
-                project_blocks
-            )
-            content = re.sub(
-                r"\\section\{Projects\}.*?(?=\\section|\Z)",
-                lambda m: new_projects_section,
-                content,
-                flags=re.S,
-            )
+            error_msg = str(e)
+            
+            # Check if this is a rate limit error - stop immediately
+            if "RATE_LIMIT_EXCEEDED" in error_msg or "429" in error_msg:
+                logger.error(f"Rate limit exceeded during project generation. Stopping process.")
+                state.error_status = f"ERROR: Rate limit exceeded. {error_msg}"
+                raise Exception(f"RATE_LIMIT_EXCEEDED: Stopping due to repeated rate limit errors")
+            
+            # Check if this is a quota exceeded error (not rate limit)
+            if "QUOTA_EXCEEDED" in error_msg or "insufficient_quota" in error_msg.lower() or "quota exceeded" in error_msg.lower():
+                logger.error(f"LLM quota exceeded: {e}")
+                state.error_status = f"ERROR: LLM API quota exhausted. {error_msg}"
+                raise LLMQuotaExceededError(f"LLM quota exceeded: {error_msg}")
+            
+            # For any other LLM failure, stop the process
+            logger.error(f"Failed to generate projects with LLM: {e}")
+            logger.error("CRITICAL: Cannot generate appropriate resume without LLM. Stopping process.")
+            state.error_status = f"ERROR: Projects generation failed - {error_msg}"
+            raise Exception(f"LLM_FAILURE: Cannot generate projects section. {error_msg}")
 
         state.resume_files[rel] = content
 
     # ---------- WRITE UPDATED FILES ----------
+    logger.info(f"DEBUG: Writing {len(state.resume_files)} updated files to {state.output_dir}")
     for rel, content in state.resume_files.items():
         out_path = os.path.join(state.output_dir, rel)
         with open(out_path, "w", encoding="utf-8") as f:
             f.write(content)
+        
+        # Verify skills are in the written file
+        if "Technical Skills" in rel or "skills" in rel.lower():
+            logger.info(f"DEBUG: Wrote skills file: {out_path}")
+            if "Java, JavaScript, Python, SQL, TypeScript" in content:
+                logger.info(f"DEBUG: ✓ Skills verified in written file {rel}")
+            else:
+                logger.error(f"DEBUG: ✗ Skills NOT in written file {rel}!")
+        else:
+            # Check if this is the main file that includes skills
+            with open(out_path, 'r', encoding='utf-8') as verify_f:
+                written_content = verify_f.read()
+                if "Technical Skills" in written_content:
+                    logger.info(f"DEBUG: File {rel} contains Technical Skills section")
+                    if "Java, JavaScript, Python, SQL, TypeScript" in written_content:
+                        logger.info(f"DEBUG: ✓ Skills verified in written file {rel}")
+                    else:
+                        logger.error(f"DEBUG: ✗ Skills NOT verified in written file {rel}!")
+                        logger.error(f"DEBUG: Skills section preview: {written_content[written_content.find('Technical Skills')-100:written_content.find('Technical Skills')+500] if 'Technical Skills' in written_content else 'NOT FOUND'}")
 
     return {}
 
 
 def compile_pdf(state: TailorState) -> dict:
     logger.info("Compiling LaTeX to PDF")
+
+    # Check if there was an error in previous steps
+    if state.error_status:
+        logger.error(f"Skipping PDF compilation due to previous error: {state.error_status}")
+        return {"compile_logs": state.error_status}
 
     if not state.main_tex:
         return {"compile_logs": "ERROR: main_tex not set. Cannot compile PDF."}
@@ -625,6 +905,27 @@ def compile_pdf(state: TailorState) -> dict:
 
 def generate_report(state: TailorState) -> dict:
     logger.info("Generating report")
+    
+    # If there was an error, include it in the report
+    if state.error_status:
+        error_report = f"# Resume Generation Failed\n\n{state.error_status}\n\n"
+        
+        # Provide specific guidance based on error type
+        if "rate limit" in state.error_status.lower() or "429" in state.error_status:
+            error_report += "**Rate Limit Error:** Too many API requests in a short period.\n\n"
+            error_report += "**Solutions:**\n"
+            error_report += "- Wait a few minutes before trying again\n"
+            error_report += "- Check if your API account has sufficient credits/quota\n"
+            error_report += "- Verify your account status with your API provider\n"
+            error_report += "- The error message above may indicate 'insufficient balance' - please recharge your account\n\n"
+        else:
+            error_report += "Please check your LLM API configuration and quota limits.\n\n"
+            error_report += "**Common solutions:**\n"
+            error_report += "- Check your LLM API provider account has sufficient credits\n"
+            error_report += "- Verify your quota limits and plan details with your API provider\n"
+            error_report += "- Check your API key is valid and properly configured\n\n"
+        return {"report_md": error_report}
+    
     report_text = report.generate_report(state)
     return {"report_md": report_text}
 
