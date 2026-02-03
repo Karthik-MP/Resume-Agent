@@ -14,7 +14,7 @@ class Settings:
     # LLM Provider Configuration
     LLM_PROVIDER: str = os.getenv(
         "LLM_PROVIDER", "openai"
-    )  # Options: openai, custom, gemini
+    )  # Options: openai, custom, gemini, moonshot
 
     # OpenAI API Configuration (ChatGPT)
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
@@ -26,13 +26,18 @@ class Settings:
     CUSTOM_BASE_URL: str = os.getenv("CUSTOM_BASE_URL", "")
     CUSTOM_MODEL: str = os.getenv("CUSTOM_MODEL", "")
 
-    # Gemini Configuration (future support)
+    # Moonshot AI Configuration
+    MOONSHOT_API_KEY: str = os.getenv("MOONSHOT_API_KEY", "")
+    MOONSHOT_BASE_URL: str = os.getenv("MOONSHOT_BASE_URL", "https://api.moonshot.ai/v1")
+    MOONSHOT_MODEL: str = os.getenv("MOONSHOT_MODEL", "kimi-k2-turbo-preview")
+
+    # Gemini Configuration
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
-    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-pro")
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
 
     # LLM Configuration
     LLM_TEMPERATURE: float = float(os.getenv("LLM_TEMPERATURE", "0.1"))
-    LLM_MAX_TOKENS: int = int(os.getenv("LLM_MAX_TOKENS", "2000"))
+    LLM_MAX_TOKENS: int = int(os.getenv("LLM_MAX_TOKENS", "4000"))
     LLM_TIMEOUT: int = int(os.getenv("LLM_TIMEOUT", "60"))
 
     # Application Settings
@@ -44,6 +49,8 @@ class Settings:
             return self.OPENAI_API_KEY
         elif self.LLM_PROVIDER == "custom":
             return self.CUSTOM_API_KEY
+        elif self.LLM_PROVIDER == "moonshot":
+            return self.MOONSHOT_API_KEY
         elif self.LLM_PROVIDER == "gemini":
             return self.GEMINI_API_KEY
         else:
@@ -55,6 +62,8 @@ class Settings:
             return self.OPENAI_BASE_URL
         elif self.LLM_PROVIDER == "custom":
             return self.CUSTOM_BASE_URL
+        elif self.LLM_PROVIDER == "moonshot":
+            return self.MOONSHOT_BASE_URL
         elif self.LLM_PROVIDER == "gemini":
             return ""  # Gemini uses different client
         else:
@@ -66,6 +75,8 @@ class Settings:
             return self.OPENAI_MODEL
         elif self.LLM_PROVIDER == "custom":
             return self.CUSTOM_MODEL
+        elif self.LLM_PROVIDER == "moonshot":
+            return self.MOONSHOT_MODEL
         elif self.LLM_PROVIDER == "gemini":
             return self.GEMINI_MODEL
         else:
@@ -74,13 +85,15 @@ class Settings:
     def validate(self) -> bool:
         """Validate required settings based on provider"""
         # Validate provider
-        valid_providers = ["openai", "custom", "gemini"]
+        valid_providers = ["openai", "custom", "moonshot", "gemini"]
         if self.LLM_PROVIDER not in valid_providers:
             raise ValueError(f"LLM_PROVIDER must be one of: {valid_providers}")
 
         # Validate API key based on provider
         if self.LLM_PROVIDER == "openai" and not self.OPENAI_API_KEY:
             raise ValueError("OPENAI_API_KEY is required when using OpenAI provider.")
+        elif self.LLM_PROVIDER == "gemini" and not self.GEMINI_API_KEY:
+            raise ValueError("GEMINI_API_KEY is required when using Gemini provider.")
         elif self.LLM_PROVIDER == "custom":
             if not self.CUSTOM_API_KEY:
                 raise ValueError(
@@ -92,6 +105,8 @@ class Settings:
                 )
             if not self.CUSTOM_MODEL:
                 raise ValueError("CUSTOM_MODEL is required when using custom provider.")
+        elif self.LLM_PROVIDER == "moonshot" and not self.MOONSHOT_API_KEY:
+            raise ValueError("MOONSHOT_API_KEY is required when using Moonshot provider.")
         elif self.LLM_PROVIDER == "gemini" and not self.GEMINI_API_KEY:
             raise ValueError("GEMINI_API_KEY is required when using Gemini provider.")
 
