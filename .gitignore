@@ -9,3 +9,8 @@ wheels/
 # Virtual environments
 .venv
 output/*
+.resume_cache/*
+
+# Generated resume outputs (keep directory but ignore contents)
+Resume/*
+!Resume/.gitkeep

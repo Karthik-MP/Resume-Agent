@@ -1,0 +1,547 @@
+{
+  "username": "Karthik-Maganahalli-Prakash",
+  "skills": {
+    "Languages": [
+      "Python",
+      "Java",
+      "JavaScript",
+      "TypeScript",
+      "SQL",
+      "Rust"
+    ],
+    "Web & Backend": [
+      "React",
+      "Next",
+      "Node.js",
+      "Express.js",
+      "Spring Boot",
+      "Spring Batch",
+      "Spring",
+      "FastAPI",
+      "Flask",
+      "Django",
+      "HTML5",
+      "CSS3",
+      "Tailwind CSS",
+      "Redux",
+      "Axios",
+      "Uvicorn",
+      "TanStack React Query",
+      "Spring Security",
+      "JWT",
+      "Spring Data JPA",
+      "REST APIs",
+      "WebSockets",
+      "Microservices",
+      "XML"
+    ],
+    "Data Science & ML": [
+      "NumPy",
+      "Pandas",
+      "Scikit-learn",
+      "TensorFlow",
+      "PyTorch",
+      "Seaborn",
+      "Matplotlib",
+      "OpenCV",
+      "Time Series Analysis",
+      "Geospatial Analysis",
+      "Data Cleaning",
+      "Exploratory Data Analysis",
+      "Data Ethics",
+      "Jupyter Notebook",
+      "LSTM",
+      "Random Forest",
+      "Decision Trees",
+      "WordCloud",
+      "SpaCy",
+      "NLTK",
+      "Snowflake"
+    ],
+    "Databases": [
+      "MySQL",
+      "PostgreSQL",
+      "MongoDB",
+      "Oracle",
+      "Oracle DB",
+      "NoSQL",
+      "TimescaleDB",
+      "psycopg2"
+    ],
+    "Cloud & DevOps": [
+      "AWS",
+      "Google Cloud Platform",
+      "Docker",
+      "Kubernetes",
+      "CI/CD",
+      "Jenkins",
+      "Firebase"
+    ],
+    "Tools & Platforms": [
+      "Git",
+      "GitHub",
+      "Linux",
+      "Unix",
+      "Postman",
+      "JUnit",
+      "Adobe Analytics",
+      "AEM",
+      "Power BI",
+      "Tableau",
+      "Faktory",
+      "SQLX",
+      "Google Perspective API",
+      "React Simple Maps",
+      "CopilotKit",
+      "LangChain",
+      "Maven"
+    ]
+  },
+  "certifications": [
+    "Oracle Java SE Programmer",
+    "Data Visualization",
+    "Python",
+    "Google Digital Marketing"
+  ],
+  "projects": [
+    {
+      "name": "Job Fit Analyzer",
+      "description": [
+        "Developed a Chrome extension using generative AI to analyze job descriptions, extract required skills, and automatically tailor resumes.",
+        "Built a Node.js backend with REST APIs to support resume parsing and customization workflows.",
+        "Implemented a cover letter generation feature with customizable templates and tone selection, increasing user engagement."
+      ],
+      "tech_stack": [
+        "React",
+        "Tailwind CSS",
+        "Node.js",
+        "REST APIs",
+        "Generative AI"
+      ],
+      "metrics": [
+        "Reduced job application time by 5–10 minutes",
+        "Increased user engagement by 30%"
+      ],
+      "tags": [
+        "resume automation",
+        "ATS optimization",
+        "generative AI",
+        "job matching",
+        "full stack"
+      ],
+      "links": ["https://github.com/Karthik-MP/Job-Fit-Analyzer"]
+    },
+    {
+      "name": "Placement Prediction System",
+      "description": [
+        "Developed a web-based placement prediction system using Django framework with machine learning capabilities.",
+        "Built a classification model to predict student placement outcomes based on academic performance, stream, specialization, and work experience.",
+        "Implemented multiple ML algorithms including Random Forest, Decision Trees, and other classifiers to achieve optimal accuracy.",
+        "Created a user-friendly web interface for educational institutions to input student data and receive placement predictions.",
+        "Integrated data preprocessing pipelines and visualization tools using Seaborn and Matplotlib for model analysis."
+      ],
+      "tech_stack": [
+        "Python",
+        "Django",
+        "NumPy",
+        "Pandas",
+        "Seaborn",
+        "Matplotlib",
+        "Scikit-learn",
+        "TensorFlow",
+        "Random Forest",
+        "Decision Trees"
+      ],
+      "metrics": [
+        "Achieved 86% prediction accuracy using Random Forest algorithm",
+        "Processed 1,000+ student data points for model training",
+        "Reduced manual analysis time by 40 hours monthly through automation",
+        "Successfully deployed web interface for real-time predictions"
+      ],
+      "tags": [
+        "machine learning",
+        "classification",
+        "web development",
+        "django",
+        "random forest",
+        "data science",
+        "predictive modeling",
+        "student analytics"
+      ],
+      "links": [
+        "https://github.com/Karthik-MP/Web_Interface-Placement_Prediction-Django"
+      ]
+    },
+    {
+      "name": "NYC Motor Vehicle Collisions Data Analysis",
+      "description": [
+        "Conducted comprehensive analysis of NYC Motor Vehicle Collisions dataset, performing data cleaning, preprocessing, and exploratory data analysis.",
+        "Implemented data ethics assessment considering biases in data collection and representativeness across different communities.",
+        "Executed time series analysis to identify crash patterns by hour, day, and month, revealing peak crash times between 16:00-17:00.",
+        "Performed geospatial analysis to map crash distributions across boroughs, identifying Brooklyn as having the highest crash frequency.",
+        "Analyzed contributing factors including driver inattention, failure to yield right-of-way, and following too closely as primary causes.",
+        "Created data visualizations using Matplotlib and Seaborn to illustrate crash trends, geographical patterns, and temporal distributions."
+      ],
+      "tech_stack": [
+        "Python",
+        "Pandas",
+        "NumPy",
+        "Matplotlib",
+        "Seaborn",
+        "Power BI",
+        "Jupyter Notebook",
+        "Data Cleaning",
+        "Exploratory Data Analysis"
+      ],
+      "metrics": [
+        "Analyzed comprehensive NYC collision dataset covering multiple years",
+        "Identified Brooklyn accounting for 35% of total crashes due to population density",
+        "Found 15% increase in crashes during peak evening hours (16:00-17:00)",
+        "Cleaned 85% of dataset by handling missing values and inconsistencies",
+        "Assessed data ethics implications for community representation"
+      ],
+      "tags": [
+        "data analysis",
+        "time series analysis",
+        "geospatial analysis",
+        "public safety",
+        "data ethics",
+        "exploratory data analysis",
+        "data visualization",
+        "urban planning",
+        "traffic safety",
+        "pandas",
+        "matplotlib",
+        "seaborn"
+      ],
+      "links": [
+        "https://github.com/Karthik-MP/NSDC-Transportation-Data-Science-Project"
+      ]
+    },
+    {
+      "name": "Lane Detection using OpenCV",
+      "description": [
+        "Developed a computer vision system for lane detection using OpenCV and image processing techniques.",
+        "Implemented region of interest (ROI) extraction to isolate lane areas from road images.",
+        "Applied masking techniques to filter out irrelevant image regions for accurate lane identification.",
+        "Created visualization tools using Matplotlib to display processed images and detected lanes."
+      ],
+      "tech_stack": ["Python", "OpenCV", "Matplotlib", "NumPy"],
+      "metrics": [
+        "Successfully isolated region of interest for lane detection",
+        "Applied binary masking for precise lane identification"
+      ],
+      "tags": [
+        "computer vision",
+        "image processing",
+        "lane detection",
+        "opencv",
+        "autonomous vehicles",
+        "machine learning"
+      ],
+      "links": [
+        "https://github.com/Karthik-MP/Lane-and-vehicle-detection-using-python/"
+      ]
+    },
+    {
+      "name": "Fake News Classification Using LSTM",
+      "description": [
+        "Developed an NLP-based fake news detection system using LSTM neural networks to classify news articles as real or fake.",
+        "Processed and analyzed a dataset of 44,000+ news articles from Reuters and unreliable sources for model training.",
+        "Implemented comprehensive data preprocessing including text cleaning, tokenization, and stopword removal using SpaCy and NLTK.",
+        "Built and trained an LSTM model achieving 85% accuracy in distinguishing authentic news from misinformation.",
+        "Created data visualization tools using Seaborn, Matplotlib, and WordCloud to analyze text patterns and model performance."
+      ],
+      "tech_stack": [
+        "Python",
+        "TensorFlow",
+        "LSTM",
+        "SpaCy",
+        "NLTK",
+        "NumPy",
+        "Pandas",
+        "Seaborn",
+        "Matplotlib",
+        "WordCloud"
+      ],
+      "metrics": [
+        "Achieved 85% accuracy in fake news classification",
+        "Processed 44,000+ news articles dataset",
+        "Reduced dataset noise by 30% through preprocessing",
+        "Successfully deployed predictive model for news authenticity verification"
+      ],
+      "tags": [
+        "natural language processing",
+        "deep learning",
+        "lstm",
+        "machine learning",
+        "text classification",
+        "tensorflow",
+        "nlp",
+        "data science",
+        "misinformation detection"
+      ],
+      "links": [
+        "https://github.com/Karthik-MP/fake_news_classfication_using_lstm"
+      ]
+    },
+    {
+      "name": "Kabaddi Event Management App",
+      "description": [
+        "Developed a full-stack web application for Kabaddi League management with React frontend and Spring Boot backend.",
+        "Implemented role-based access control with JWT authentication for admin and user functionalities using Spring Security.",
+        "Built comprehensive admin features for managing referees, teams, and venues with CRUD operations via REST APIs.",
+        "Created user-facing features for event booking, booking history viewing, and booking modifications with React and Axios.",
+        "Integrated MySQL database with Spring Data JPA for efficient data management and persistence."
+      ],
+      "tech_stack": [
+        "React",
+        "Spring Boot",
+        "Java",
+        "Spring Security",
+        "JWT",
+        "Spring Data JPA",
+        "MySQL",
+        "REST API",
+        "Axios",
+        "Maven",
+        "Postman"
+      ],
+      "metrics": [
+        "Successfully improved Kabaddi League management efficiency",
+        "Enhanced user experience in online booking system",
+        "Simplified event management workflow",
+        "Implemented secure role-based authentication system"
+      ],
+      "tags": [
+        "full stack development",
+        "React",
+        "spring boot",
+        "java",
+        "rest api",
+        "jwt authentication",
+        "mysql",
+        "event management",
+        "web application",
+        "role-based access control"
+      ],
+      "links": ["https://github.com/Karthik-MP/kabaddi_event_management"]
+    },
+    {
+      "name": "Social Media Analytics Platform",
+      "description": [
+        "Built a cross-platform analytics platform comparing engagement patterns across 4chan and Reddit with AI-powered insights.",
+        "Continuously ingests posts from selected 4chan boards and Reddit subreddits and persists them in TimescaleDB for time-series analysis.",
+        "Implemented separate collectors for 4chan and Reddit with cold-start and incremental crawling capabilities, ETL pipelines, and configurable source lists.",
+        "Uses Faktory for background job processing to enable long-running, hands-off ingestion and scoring workflows.",
+        "Integrates Google Perspective API for per-post toxicity scoring at ingest to enable moderation-aware analytics.",
+        "Designed dual PostgreSQL/TimescaleDB databases with SQLX/Rust migrations alongside Python tooling for reproducible deployments.",
+        "Implemented LangChain-based AI agents and CopilotKit integrations for natural language SQL queries and automated insight generation.",
+        "Developed backend APIs with FastAPI and a Next + TypeScript frontend with rich visualizations using ApexCharts and React Simple Maps.",
+        "Includes plotting and analysis utilities to generate activity snapshots, toxicity comparisons, keyword trends, and platform comparison dashboards."
+      ],
+      "tech_stack": [
+        "Python",
+        "FastAPI",
+        "PostgreSQL",
+        "TimescaleDB",
+        "Rust",
+        "SQLX",
+        "Faktory",
+        "Docker",
+        "LangChain",
+        "CopilotKit",
+        "Google Perspective API",
+        "psycopg2",
+        "Pandas",
+        "Matplotlib",
+        "Uvicorn",
+        "Next",
+        "React",
+        "TypeScript",
+        "Tailwind CSS",
+        "ApexCharts",
+        "React Simple Maps",
+        "Axios",
+        "TanStack React Query"
+      ],
+      "metrics": [
+        "Supports continuous ingestion across multiple 4chan boards and Reddit subreddits",
+        "Persists time-series data in TimescaleDB for efficient querying and analysis",
+        "Applies toxicity scoring at ingest using Perspective API to enable moderation-aware analytics",
+        "Built interactive dashboards for board/subreddit-level analytics and platform comparisons",
+        "Added AI agent for natural-language SQL queries enabling non-technical analysts to explore data",
+        "Provides migration scripts and repeatable deployment with Docker and Faktory workers"
+      ],
+      "tags": [
+        "social media analytics",
+        "data collection",
+        "4chan",
+        "reddit",
+        "langchain",
+        "copilotkit",
+        "fastapi",
+        "nextjs",
+        "data visualization",
+        "toxicity analysis",
+        "platform comparison",
+        "postgreSQL",
+        "timescaledb",
+        "ai-agents",
+        "faktory",
+        "perspective-api",
+        "python",
+        "docker",
+        "rust"
+      ],
+      "links": ["https://github.com/Karthik-MP/smdsp-dashboard/"]
+    },
+    {
+      "name": "Reddit & 4chan Knowledge-Graph RAG Index",
+      "description": [
+        "Implemented a Retrieval-Augmented Generation (RAG) system that builds a knowledge graph from Reddit and 4chan discussions and enables natural-language question answering over structured knowledge.",
+        "Built incremental ingestion pipeline using timestamp-based checkpoints to fetch new posts and comments from PostgreSQL databases, preventing duplicate ingestion and ensuring safe restarts.",
+        "Extracted structured knowledge triplets (entities and relationships) using LLMs and stored them as nodes and relationships in Neo4j knowledge graph.",
+        "Developed graph-aware reasoning capabilities enabling analysis of how discussions differ across platforms, identifying recurring themes, and tracking narrative evolution over time.",
+        "Implemented query system allowing natural-language questions with LLM-generated answers grounded in explicit graph relationships and evidence."
+      ],
+      "tech_stack": [
+        "Python",
+        "PostgreSQL",
+        "Neo4j",
+        "LlamaIndex",
+        "OpenAI",
+        "REST APIs",
+        "Vector Databases",
+        "LLMs"
+      ],
+      "metrics": [
+        "Transformed unstructured social media discussions into structured, queryable knowledge graph",
+        "Enabled cross-platform discourse analysis and platform comparison capabilities",
+        "Implemented incremental data ingestion with checkpoint system for efficient updates",
+        "Preserved explicit relationships between concepts for improved interpretability"
+      ],
+      "tags": [
+        "retrieval-augmented generation",
+        "knowledge graph",
+        "neo4j",
+        "llamaindex",
+        "natural language processing",
+        "social media analysis",
+        "graph database",
+        "openai",
+        "rag system",
+        "discourse analysis",
+        "vector-database",
+        "llm"
+      ],
+      "links": ["https://github.com/Karthik-MP/Social-Media-Rag-llamaIndex"]
+    },
+    {
+      "name": "AI Job Analyzer – Resume Screening & Live Job Matching on AWS",
+      "description": [
+        "Built a cloud-native AI platform to semantically compare resumes with job descriptions using Sentence-BERT and cosine similarity.",
+        "Implemented a Streamlit UI for interactive resume upload, scoring, and missing-keyword suggestions to improve ATS fit.",
+        "Added real-time job scraping from LinkedIn using Playwright and BeautifulSoup to provide live job recommendations based on parsed skills.",
+        "Packaged infrastructure as Terraform code and deployed on AWS with EC2 + Application Load Balancer for scalable serving."
+      ],
+      "tech_stack": [
+        "Python",
+        "Streamlit",
+        "Sentence-BERT (all-MiniLM-L6-v2)",
+        "Playwright",
+        "BeautifulSoup",
+        "AWS",
+        "Terraform",
+        "ALB",
+        "Docker"
+      ],
+      "metrics": [
+        "Semantic match scoring for resumes and job descriptions",
+        "Real-time LinkedIn scraping for live job recommendations",
+        "Scalable deployment on AWS using Terraform and Application Load Balancer"
+      ],
+      "tags": [
+        "resume screening",
+        "job matching",
+        "sentence-bert",
+        "streamlit",
+        "playwright",
+        "web-scraping",
+        "terraform",
+        "aws",
+        "nlp"
+      ],
+      "links": [
+        "https://github.com/Karthik-MP/AI-Job-analyzer"
+      ]
+    },
+    {
+      "name": "Flask Chat Application with WebSockets and MongoDB",
+      "description": [
+        "Built a real-time Flask chat application using WebSockets for live messaging and MongoDB for message persistence.",
+        "Containerized the Flask app and MongoDB with Docker and deployed to Kubernetes with a 3-replica Flask deployment for high availability.",
+        "Implemented scalable architecture using Kubernetes services and configuration for production-like orchestration."
+      ],
+      "tech_stack": [
+        "Python",
+        "Flask",
+        "WebSockets",
+        "MongoDB",
+        "Docker",
+        "Kubernetes"
+      ],
+      "metrics": [
+        "Multi-replica deployment (3 replicas) for high availability",
+        "Persistent message storage in MongoDB",
+        "Containerized images published to Docker Hub"
+      ],
+      "tags": [
+        "flask",
+        "websockets",
+        "mongodb",
+        "docker",
+        "kubernetes",
+        "real-time"
+      ],
+      "links": [
+        "https://github.com/Karthik-MP/Flask-Chat-Application",
+        "https://hub.docker.com/repository/docker/karthikmp15/flask-chat-application/"
+      ]
+    },
+    {
+      "name": "Hashassin Password Cracking Suite",
+      "description": [
+        "Built a Rust-based CLI for password generation, hash creation, and dump utilities with configurable algorithms and multithreading.",
+        "Implemented rainbow table generation and cracking workflows with deterministic file formats for hashes and tables.",
+        "Developed a TCP client-server system to upload rainbow tables and crack hash files remotely."
+      ],
+      "tech_stack": [
+        "Rust",
+        "Cargo",
+        "CLI",
+        "TCP",
+        "md5",
+        "sha256",
+        "sha3_512",
+        "scrypt"
+      ],
+      "metrics": [
+        "Supports multi-threaded password generation and cracking",
+        "Uploads and reuses rainbow tables for remote cracking sessions",
+        "Implements structured binary formats for hash and rainbow outputs"
+      ],
+      "tags": [
+        "password cracking",
+        "rainbow tables",
+        "hashing",
+        "rust",
+        "cli",
+        "client-server",
+        "multithreading",
+        "security"
+      ],
+      "links": ["https://github.com/Karthik-MP/Password-Generator-Using-Rust"]
+    }
+  ]
+}

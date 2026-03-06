@@ -123,7 +123,7 @@ def get_llm():
                 model=model,
                 temperature=settings.LLM_TEMPERATURE,
                 max_tokens=settings.LLM_MAX_TOKENS,
-                timeout=settings.LLM_TIMEOUT,
+                # timeout=settings.LLM_TIMEOUT,
             )
         else:
             # For OpenAI and Custom providers, use ChatOpenAI client
@@ -148,15 +148,7 @@ def get_llm():
                 temperature=settings.LLM_TEMPERATURE,
                 max_tokens=settings.LLM_MAX_TOKENS,
                 timeout=settings.LLM_TIMEOUT,
-                default_headers={
-                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-                        "Accept": "application/json",
-                        "Accept-Language": "en-US,en;q=0.9",
-                        "Referer": "https://agent.vivekmalipatel.com/",
-                        "Origin": "https://agent.vivekmalipatel.com",
-                        "Sec-Fetch-Mode": "cors",
-                        "Sec-Fetch-Site": "same-origin"
-                    }
+                streaming=False,
             )
 
     return _llm_instance
@@ -213,7 +205,37 @@ def call_llm(system_prompt: str, user_prompt: str, max_retries: int = 2) -> str:
             logger.info(f"Attempt {attempt + 1}/{max_retries}: Invoking LLM...")
             response = llm.invoke(messages)
             logger.debug(f"LLM response length: {len(response.content)}")
+            
+            # Check for empty response
+            if not response.content or len(response.content.strip()) == 0:
+                logger.error("=" * 60)
+                logger.error("EMPTY RESPONSE FROM LLM API")
+                logger.error("=" * 60)
+                logger.error(f"Provider: {settings.LLM_PROVIDER}")
+                logger.error(f"Model: {settings.get_active_model()}")
+                logger.error(f"Base URL: {settings.get_active_base_url()}")
+                logger.error(f"Response object: {response}")
+                logger.error(f"Response content type: {type(response.content)}")
+                logger.error(f"Response content repr: {repr(response.content)}")
+                logger.error("=" * 60)
+                logger.error("POSSIBLE CAUSES:")
+                logger.error("1. Model may not be available through this API endpoint")
+                logger.error("2. Model may require different parameters or headers")
+                logger.error("3. API endpoint may not support this model")
+                logger.error("=" * 60)
+                logger.error("RECOMMENDED SOLUTIONS:")
+                logger.error("1. Switch to Gemini: Set LLM_PROVIDER=gemini in .env")
+                logger.error("2. Switch to OpenAI: Set LLM_PROVIDER=openai in .env")
+                logger.error("3. Use Moonshot directly: Set LLM_PROVIDER=moonshot in .env")
+                logger.error("=" * 60)
+                raise Exception(
+                    f"EMPTY_RESPONSE: LLM returned empty response. "
+                    f"Model '{settings.get_active_model()}' may not be available through {settings.get_active_base_url()}. "
+                    f"Try switching to gemini, openai, or moonshot provider."
+                )
+            
             logger.info("LLM call successful")
+            logger.debug(f"Response preview: {response.content[:200]}...")
             return response.content
 
         except Exception as e:

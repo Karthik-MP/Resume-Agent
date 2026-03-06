@@ -11,6 +11,10 @@ from resume_agent import tools, tex, profile, report, prompts, compile as compil
 
 logger = logging.getLogger(__name__)
 
+# Project root directory (parent of resume_agent/)
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+TEMPLATE_DIR = os.path.join(PROJECT_ROOT, "SWE_Resume_Template")
+
 # Framework to programming language mapping
 FRAMEWORK_TO_LANGUAGE = {
     "spring boot": "Java",
@@ -308,12 +312,19 @@ def plan_edits(state: TailorState) -> dict:
 
             # Parse JSON array response
             import json
+            import re
 
             # Clean response - remove markdown code blocks if present
             response_clean = response.strip()
             logger.debug(f"Project scoring response: {response_clean}")
             
-            if response_clean.startswith("```"):
+            # Try to extract JSON from markdown code blocks (```json ... ``` or ``` ... ```)
+            code_block_match = re.search(r'```(?:json)?\s*\n?(.*?)\n?```', response_clean, re.DOTALL)
+            if code_block_match:
+                response_clean = code_block_match.group(1).strip()
+                logger.info("Extracted JSON from markdown code block in project scoring")
+            elif response_clean.startswith("```"):
+                # Fallback to old logic if regex doesn't match
                 lines = response_clean.split("\n")
                 if lines[0].startswith("```"):
                     lines = lines[1:]
@@ -406,7 +417,7 @@ def plan_edits(state: TailorState) -> dict:
         "Tools & Platforms": "Tools",
     }
 
-    skills_by_category = {"Languages": set(), "Technologies": set(), "Tools": set()}
+    skills_by_category = {"Languages": [], "Technologies": [], "Tools": []}
     profile_skills = profile_data.get("skills", {})
 
     # Collect tech stack from selected projects
@@ -450,8 +461,15 @@ def plan_edits(state: TailorState) -> dict:
         logger.info(f"DEBUG: LLM raw response length: {len(response_clean)} chars")
         logger.debug(f"Skills LLM response: {response_clean}")
 
-        # Clean markdown code blocks if present
-        if response_clean.startswith("```"):
+        # Clean markdown code blocks if present - handle text before/after code block
+        import re
+        # Try to extract JSON from markdown code blocks (```json ... ``` or ``` ... ```)
+        code_block_match = re.search(r'```(?:json)?\s*\n?(.*?)\n?```', response_clean, re.DOTALL)
+        if code_block_match:
+            response_clean = code_block_match.group(1).strip()
+            logger.info("Extracted JSON from markdown code block")
+        elif response_clean.startswith("```"):
+            # Fallback to old logic if regex doesn't match
             lines = response_clean.split("\n")
             if lines[0].startswith("```"):
                 lines = lines[1:]
@@ -494,13 +512,16 @@ def plan_edits(state: TailorState) -> dict:
         for cat, skills in selected_skills.items():
             logger.info(f"DEBUG: LLM category '{cat}': {len(skills)} skills = {skills}")
 
-        # Map to output categories and limit to 10-15 per category
+        # Map to output categories preserving LLM's priority order
+        skills_by_category = {"Languages": [], "Technologies": [], "Tools": []}
         for category, skills in selected_skills.items():
             mapped_category = category_mapping.get(category)
             if mapped_category and skills:
-                # Limit to top 15 skills per category
-                skills_by_category[mapped_category].update(skills[:15])
-                logger.info(f"DEBUG: Mapped '{category}' -> '{mapped_category}': added {len(skills[:15])} skills")
+                # Preserve LLM order - extend list instead of updating set
+                for skill in skills:
+                    if skill not in skills_by_category[mapped_category]:
+                        skills_by_category[mapped_category].append(skill)
+                logger.info(f"DEBUG: Mapped '{category}' -> '{mapped_category}': added skills preserving LLM order")
 
         logger.info("Skills filtered using LLM")
         logger.info(f"DEBUG: skills_by_category after LLM: {dict((k, sorted(v)) for k, v in skills_by_category.items())}")
@@ -532,8 +553,8 @@ def plan_edits(state: TailorState) -> dict:
                     if is_match:
                         mapped_category = category_mapping.get(category)
                         if mapped_category:
-                            if profile_skill not in skills_by_category.get(mapped_category, set()):
-                                skills_by_category[mapped_category].add(profile_skill)
+                            if profile_skill not in skills_by_category.get(mapped_category, []):
+                                skills_by_category[mapped_category].append(profile_skill)
                                 logger.info(f"DEBUG: Force-added '{profile_skill}' to {mapped_category} (matched '{exp_skill}')")
                                 added_count += 1
                             else:
@@ -549,17 +570,53 @@ def plan_edits(state: TailorState) -> dict:
         
         logger.info(f"DEBUG: Force-added {added_count} missing experience skills")
         logger.info(f"DEBUG: skills_by_category after force-add: {dict((k, sorted(v)) for k, v in skills_by_category.items())}")
-        
+
+        # CRITICAL: Force-add profile skills that are explicitly mentioned in the JD text.
+        # Use word-boundary matching so "spring" in the JD does NOT accidentally pull in
+        # "Spring Batch", "Spring Security", "Spring Data JPA" unless those exact phrases appear.
+        logger.info("DEBUG: Starting force-add of JD-matched profile skills...")
+        jd_matched_count = 0
+        for category, profile_skill_list in profile_skills.items():
+            mapped_category = category_mapping.get(category)
+            if not mapped_category:
+                continue
+            for profile_skill in profile_skill_list:
+                skill_lower = profile_skill.lower().strip()
+                # Normalize variants for matching: "Node.js" → ["node.js", "node js"], "CI/CD" → ["ci/cd", "ci cd"]
+                # Keep multi-word skills as full phrases so we require the full phrase in the JD.
+                skill_variants = {
+                    skill_lower,
+                    skill_lower.replace(".", ""),   # "node.js" → "nodejs"
+                    skill_lower.replace("/", " "),   # "ci/cd" → "ci cd"
+                    skill_lower.replace(".js", ""),  # "react.js" → "react"
+                }
+                skill_variants = {v.strip() for v in skill_variants if len(v.strip()) > 2}
+                # Use word-boundary regex so "java" doesn't match "javascript",
+                # and "spring" doesn't match "spring boot" unless "spring" appears alone.
+                matched = False
+                for variant in skill_variants:
+                    escaped = re.escape(variant)
+                    if re.search(rf'\b{escaped}\b', jd_text_lower):
+                        matched = True
+                        break
+                if matched:
+                    if profile_skill not in skills_by_category.get(mapped_category, []):
+                        skills_by_category[mapped_category].append(profile_skill)
+                        logger.info(f"DEBUG: JD-matched force-added '{profile_skill}' to {mapped_category}")
+                        jd_matched_count += 1
+        logger.info(f"DEBUG: JD-matched force-added {jd_matched_count} profile skills mentioned in JD")
+        logger.info(f"DEBUG: skills_by_category after JD-match force-add: {dict((k, sorted(v)) for k, v in skills_by_category.items())}")
+
         # Ensure required languages are included based on frameworks
         all_skills_text = " ".join(str(s) for skills in skills_by_category.values() for s in skills)
         required_languages = get_required_languages(all_skills_text, jd_text_lower)
         
         for lang in required_languages:
-            if lang not in skills_by_category.get("Languages", set()):
+            if lang not in skills_by_category.get("Languages", []):
                 # Check if language exists in profile
                 for category, skills in profile_skills.items():
                     if lang in skills:
-                        skills_by_category["Languages"].add(lang)
+                        skills_by_category["Languages"].append(lang)
                         logger.info(f"DEBUG: Added {lang} to Languages (required by frameworks in JD/skills)")
                         break
 
@@ -580,10 +637,10 @@ def plan_edits(state: TailorState) -> dict:
         state.error_status = f"ERROR: LLM failure - {error_msg}"
         raise Exception(f"LLM_FAILURE: Cannot filter skills appropriately. {error_msg}")
 
-    # Convert sets to sorted lists and limit to 15 per category
-    skills_by_category = {k: sorted(v)[:15] for k, v in skills_by_category.items() if v}
+    # Limit to 10 per category, preserving LLM's priority order (LLM puts JD matches first)
+    skills_by_category = {k: v[:10] for k, v in skills_by_category.items() if v}
     
-    logger.info(f"DEBUG: FINAL skills_by_category (limited to 15 each): {skills_by_category}")
+    logger.info(f"DEBUG: FINAL skills_by_category (limited to 10 each, LLM-prioritized): {skills_by_category}")
     for cat, skills in skills_by_category.items():
         logger.info(f"DEBUG: FINAL {cat}: {len(skills)} skills = {skills}")
 
@@ -626,9 +683,12 @@ def apply_edits(state: TailorState) -> dict:
             continue
 
         try:
-            # Load the skills format template
+            # Load the skills format template from project template directory
+            logger.info(f"DEBUG: Loading skills template from: {os.path.join(TEMPLATE_DIR, 'templates')}")
+            logger.info(f"DEBUG: Template exists: {os.path.exists(os.path.join(TEMPLATE_DIR, 'templates', 'skills_format.tex'))}")
+            
             skills_template = tex.load_template(
-                "skills_format.tex", state.resume_root_dir
+                "skills_format.tex", TEMPLATE_DIR
             )
 
             # Get selected skills from plan
@@ -655,16 +715,19 @@ def apply_edits(state: TailorState) -> dict:
             logger.info(f"DEBUG: Generated skills LaTeX length: {len(generated_skills_latex)} chars")
             logger.info(f"DEBUG: Generated skills LaTeX preview:\n{generated_skills_latex[:500]}")
 
-            # Clean the output (remove any markdown code blocks if present)
+            # Clean the output - strip markdown code fences if LLM added them
             generated_skills_latex = generated_skills_latex.strip()
-            if generated_skills_latex.startswith("```"):
+            code_block_match = re.search(r'```(?:latex|tex)?\s*\n?(.*?)\n?```', generated_skills_latex, re.DOTALL)
+            if code_block_match:
+                generated_skills_latex = code_block_match.group(1).strip()
+                logger.info("DEBUG: Stripped markdown code fences from skills LaTeX")
+            elif generated_skills_latex.startswith("```"):
                 lines = generated_skills_latex.split("\n")
-                # Remove first and last lines if they're code fence markers
                 if lines[0].startswith("```"):
-                    lines = lines
+                    lines = lines[1:]  # remove opening fence
                 if lines and lines[-1].startswith("```"):
-                    lines = lines[:-1]
-                generated_skills_latex = "\n".join(lines)
+                    lines = lines[:-1]  # remove closing fence
+                generated_skills_latex = "\n".join(lines).strip()
 
             logger.info(f"DEBUG: Cleaned skills LaTeX length: {len(generated_skills_latex)} chars")
             
@@ -728,9 +791,9 @@ def apply_edits(state: TailorState) -> dict:
             continue
 
         try:
-            # Load the projects format template
+            # Load the projects format template from project template directory
             projects_template = tex.load_template(
-                "projects_format.tex", state.resume_root_dir
+                "projects_format.tex", TEMPLATE_DIR
             )
 
             # Get selected projects from plan (max 2)
@@ -779,15 +842,19 @@ def apply_edits(state: TailorState) -> dict:
                 system_prompt=prompts.GENERATE_PROJECTS_SYSTEM, user_prompt=user_prompt
             )
 
-            # Clean the output (remove any markdown code blocks if present)
+            # Clean the output - strip markdown code fences if LLM added them
             generated_projects_latex = generated_projects_latex.strip()
-            if generated_projects_latex.startswith("```"):
+            code_block_match = re.search(r'```(?:latex|tex)?\s*\n?(.*?)\n?```', generated_projects_latex, re.DOTALL)
+            if code_block_match:
+                generated_projects_latex = code_block_match.group(1).strip()
+                logger.info("DEBUG: Stripped markdown code fences from projects LaTeX")
+            elif generated_projects_latex.startswith("```"):
                 lines = generated_projects_latex.split("\n")
                 if lines[0].startswith("```"):
-                    lines = lines[1:]
+                    lines = lines[1:]  # remove opening fence
                 if lines and lines[-1].startswith("```"):
-                    lines = lines[:-1]
-                generated_projects_latex = "\n".join(lines)
+                    lines = lines[:-1]  # remove closing fence
+                generated_projects_latex = "\n".join(lines).strip()
 
             # Replace the entire projects section
             # Use lambda to avoid backslash interpretation issues
@@ -899,6 +966,14 @@ def compile_pdf(state: TailorState) -> dict:
 
     # Update state with new path
     state.output_pdf_path = new_pdf_path
+    
+    # Log exact file locations
+    logger.info("="*80)
+    logger.info("📄 RESUME FILES GENERATED AT:")
+    logger.info(f"  Output Directory: {state.output_dir}")
+    logger.info(f"  PDF Location: {new_pdf_path}")
+    logger.info(f"  Skills File: {os.path.join(state.output_dir, 'src/skills.tex')}")
+    logger.info("="*80)
 
     return {"compile_logs": logs, "output_pdf_path": new_pdf_path}
 
