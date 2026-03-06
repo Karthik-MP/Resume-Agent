@@ -1,9 +1,8 @@
-# tailor.py
 #!/usr/bin/env python3
 import argparse
 import os
 import logging
-from resume_agent.graph import build_graph, TailorState
+from resume_agent.graph import build_graph, TailorState, LLMQuotaExceededError
 
 
 def main():
@@ -79,7 +78,35 @@ def main():
     )
     # Build and run LangGraph
     graph = build_graph()
-    final_state = graph.invoke(state)
+    
+    try:
+        final_state = graph.invoke(state)
+    except LLMQuotaExceededError as e:
+        logger.error("=" * 60)
+        logger.error("PROCESS STOPPED: LLM API Quota Exhausted")
+        logger.error("=" * 60)
+        logger.error(f"Error: {e}")
+        logger.error("")
+        logger.error("Your LLM API quota has been exhausted.")
+        logger.error("Please check your API provider's plan and billing details.")
+        logger.error("=" * 60)
+        
+        # Write error report if possible
+        if state.output_dir and os.path.exists(state.output_dir):
+            report_path = os.path.join(state.output_dir, "report.md")
+            error_report = f"# Resume Generation Failed\\n\\n"
+            error_report += f"**Error:** LLM API Quota Exhausted\\n\\n"
+            error_report += f"Details: {str(e)}\\n\\n"
+            error_report += "Please check your LLM API provider's account has sufficient credits and verify your quota limits.\\n"
+            with open(report_path, "w") as f:
+                f.write(error_report)
+            logger.info(f"Error report written to {report_path}")
+        
+        return  # Exit with error
+    except Exception as e:
+        logger.error(f"Unexpected error during resume generation: {e}")
+        raise
+    
     # Write report and output PDF path
     if final_state.get("report_md"):
         report_path = os.path.join(state.output_dir, "report.md")

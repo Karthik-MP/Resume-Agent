@@ -18,7 +18,7 @@ import zipfile
 import uuid
 import hashlib
 from dotenv import load_dotenv
-from resume_agent.graph import build_graph, TailorState
+from resume_agent.graph import build_graph, TailorState, LLMQuotaExceededError
 
 # Load environment variables from .env file
 load_dotenv()
@@ -34,6 +34,9 @@ logger = logging.getLogger(__name__)
 # Create cache directory for resume templates
 CACHE_DIR = os.path.join(os.getcwd(), ".resume_cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
+
+# Cache version - increment this when you want to invalidate all caches
+CACHE_VERSION = "v3"  # Increment to force fresh template download
 
 # Initialize FastAPI app
 app = FastAPI(title="Resume Agent API", version="1.0.0")
@@ -53,11 +56,18 @@ app.add_middleware(
 # Note: Set FIREBASE_CREDENTIALS_PATH environment variable to your Firebase service account JSON
 firebase_credentials_path = os.getenv("FIREBASE_CREDENTIALS_PATH")
 if firebase_credentials_path and os.path.exists(firebase_credentials_path):
-    cred = credentials.Certificate(firebase_credentials_path)
-    firebase_admin.initialize_app(
-        cred, {"storageBucket": "resume-generator-492c5.firebasestorage.app"}
-    )
-    logger.info("Firebase Admin SDK initialized")
+    # Check if Firebase app is already initialized (important for reload mode)
+    try:
+        firebase_admin.get_app()
+        logger.info("Firebase Admin SDK already initialized")
+    except ValueError:
+        # App doesn't exist, initialize it
+        cred = credentials.Certificate(firebase_credentials_path)
+        firebase_admin.initialize_app(
+            cred, {"storageBucket": "resume-generator-492c5.firebasestorage.app"}
+        )
+        logger.info("Firebase Admin SDK initialized")
+    
     db = firestore.client()
     bucket = storage.bucket()
 else:
@@ -72,6 +82,7 @@ class GenerateRequest(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
+                "jobId": "12345678-1234-1234-1234-123456789abc",
                 "companyName": "Tech Corp",
                 "jobTitle": "Senior Software Engineer",
                 "jobUrl": "https://example.com/job/12345",
@@ -85,6 +96,9 @@ class GenerateRequest(BaseModel):
         populate_by_name=True,
     )
 
+    job_id: Optional[str] = Field(
+        None, alias="jobId", description="Existing job ID for regeneration (optional)"
+    )
     company_name: str = Field(
         ..., alias="companyName", description="Name of the company"
     )
@@ -225,9 +239,46 @@ async def generate_resume(
         logger.info(f"✓ Resume Zip URL: {request.resume_zip_url}")
         logger.info(f"✓ Generate Items: {', '.join(generate_items)}")
 
-        # Generate unique job ID
-        job_id = str(uuid.uuid4())
-        logger.info(f"✓ Job ID: {job_id}")
+        # Use provided job ID for regeneration, or generate a new one
+        is_regeneration = bool(request.job_id)
+        job_id = request.job_id if is_regeneration else str(uuid.uuid4())
+        old_resume_pdf_url = None
+        
+        if is_regeneration:
+            logger.info(f"✓ Regenerating existing job: {job_id}")
+            
+            # Verify the job exists and belongs to this user
+            try:
+                existing_app = (
+                    db.collection("job_applied")
+                    .document(authenticated_user_id)
+                    .collection("applications")
+                    .document(job_id)
+                    .get()
+                )
+                
+                if not existing_app.exists:
+                    raise HTTPException(
+                        status_code=404,
+                        detail=f"Job ID {job_id} not found for this user"
+                    )
+                
+                # Store old PDF URL for deletion later
+                existing_data = existing_app.to_dict()
+                old_resume_pdf_url = existing_data.get("resume_pdf_url")
+                logger.info(f"Old resume PDF URL: {old_resume_pdf_url}")
+                
+                logger.info("✓ Existing job found. Proceeding with regeneration...")
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.error(f"Error verifying existing job: {e}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to verify existing job: {str(e)}"
+                )
+        else:
+            logger.info(f"✓ Creating new job: {job_id}")
 
         # Only generate resume for now (cover letter and email will be implemented later)
         if request.generate_resume:
@@ -241,15 +292,16 @@ async def generate_resume(
 
             try:
                 # 1. Download and extract resume zip (with caching)
-                # Create a hash of the URL to use as cache key
-                url_hash = hashlib.md5(request.resume_zip_url.encode()).hexdigest()
+                # Create a hash of the URL to use as cache key (including cache version)
+                cache_key = f"{request.resume_zip_url}_{CACHE_VERSION}"
+                url_hash = hashlib.md5(cache_key.encode()).hexdigest()
                 cached_zip = os.path.join(CACHE_DIR, f"{url_hash}.zip")
                 cached_extracted = os.path.join(CACHE_DIR, f"{url_hash}_extracted")
 
                 # Check if already cached
                 if os.path.exists(cached_extracted) and os.path.isdir(cached_extracted):
                     logger.info(
-                        f"✓ Using cached resume template (hash: {url_hash[:8]}...)"
+                        f"✓ Using cached resume template (hash: {url_hash[:8]}..., version: {CACHE_VERSION})"
                     )
                     # Copy from cache to temp directory
                     shutil.copytree(cached_extracted, resume_dir)
@@ -267,7 +319,7 @@ async def generate_resume(
                     with zipfile.ZipFile(cached_zip, "r") as zip_ref:
                         zip_ref.extractall(cached_extracted)
 
-                    logger.info(f"✓ Resume template cached (hash: {url_hash[:8]}...)")
+                    logger.info(f"✓ Resume template cached (hash: {url_hash[:8]}..., version: {CACHE_VERSION})")
 
                     # Copy from cache to temp directory
                     shutil.copytree(cached_extracted, resume_dir)
@@ -307,7 +359,95 @@ async def generate_resume(
                 )
 
                 graph = build_graph()
-                final_state = graph.invoke(state)
+                
+                try:
+                    final_state = graph.invoke(state)
+                    
+                    # Check for error status in final state
+                    if final_state.get("error_status"):
+                        error_msg = final_state.get("error_status")
+                        logger.error(f"Resume generation failed: {error_msg}")
+                        raise Exception(error_msg)
+                    
+                except LLMQuotaExceededError as e:
+                    logger.error("=" * 60)
+                    logger.error("PROCESS STOPPED: LLM API Quota Exhausted")
+                    logger.error("=" * 60)
+                    logger.error(f"Error: {e}")
+                    
+                    # Update Firebase job status to failed if regeneration
+                    if is_regeneration:
+                        app_ref = (
+                            db.collection("job_applied")
+                            .document(authenticated_user_id)
+                            .collection("applications")
+                            .document(job_id)
+                        )
+                        app_ref.update({
+                            "status": "failed",
+                            "error": f"LLM API Quota Exhausted: {str(e)}",
+                            "failed_at": firestore.SERVER_TIMESTAMP,
+                        })
+                    
+                    raise HTTPException(
+                        status_code=402,  # Payment Required
+                        detail={
+                            "error": "LLM_QUOTA_EXHAUSTED",
+                            "message": "Your LLM API quota has been exhausted. Please check your API provider's plan and billing details."
+                        }
+                    )
+                except Exception as e:
+                    error_msg = str(e)
+                    logger.error(f"Resume generation error: {error_msg}")
+                    
+                    # Check if this is an LLM failure
+                    if "LLM_FAILURE" in error_msg or "RATE_LIMIT_EXCEEDED" in error_msg or "Gemini API" in error_msg:
+                        logger.error("=" * 60)
+                        logger.error("PROCESS STOPPED: LLM Service Failed")
+                        logger.error("=" * 60)
+                        
+                        # Update Firebase job status to failed if regeneration
+                        if is_regeneration:
+                            app_ref = (
+                                db.collection("job_applied")
+                                .document(authenticated_user_id)
+                                .collection("applications")
+                                .document(job_id)
+                            )
+                            app_ref.update({
+                                "status": "failed",
+                                "error": error_msg,
+                                "failed_at": firestore.SERVER_TIMESTAMP,
+                            })
+                        
+                        raise HTTPException(
+                            status_code=503,  # Service Unavailable
+                            detail={
+                                "error": "LLM_SERVICE_FAILED",
+                                "message": f"Resume generation failed due to LLM service error. Please try again later. Details: {error_msg}"
+                            }
+                        )
+                    
+                    # Other unexpected errors
+                    logger.error(f"Unexpected error during resume generation: {e}")
+                    
+                    if is_regeneration:
+                        app_ref = (
+                            db.collection("job_applied")
+                            .document(authenticated_user_id)
+                            .collection("applications")
+                            .document(job_id)
+                        )
+                        app_ref.update({
+                            "status": "failed",
+                            "error": str(e),
+                            "failed_at": firestore.SERVER_TIMESTAMP,
+                        })
+                    
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Resume generation failed: {str(e)}"
+                    )
 
                 # Check if PDF was generated
                 pdf_path = final_state.get("output_pdf_path", state.output_pdf_path)
@@ -319,7 +459,40 @@ async def generate_resume(
 
                 logger.info(f"✓ Resume PDF generated at: {pdf_path}")
 
-                # 6. Upload PDF to Firebase Storage
+                # 6. Delete old PDF from Firebase Storage if regeneration
+                if is_regeneration and old_resume_pdf_url:
+                    try:
+                        logger.info("Deleting old PDF from Firebase Storage...")
+                        logger.info(f"Old PDF URL to delete: {old_resume_pdf_url}")
+                        # Extract the storage path from the public URL
+                        # URL format: https://storage.googleapis.com/{bucket}/users/{user_id}/generated_resumes/{filename}
+                        if "/generated_resumes/" in old_resume_pdf_url:
+                            # Extract path after bucket name
+                            path_parts = old_resume_pdf_url.split("/generated_resumes/")
+                            if len(path_parts) > 1:
+                                filename = path_parts[1].split("?")[0]  # Remove query params if any
+                                old_storage_path = f"users/{authenticated_user_id}/generated_resumes/{filename}"
+                                logger.info(f"Attempting to delete: {old_storage_path}")
+                                
+                                old_blob = bucket.blob(old_storage_path)
+                                if old_blob.exists():
+                                    old_blob.delete()
+                                    logger.info(f"✓ Old PDF deleted: {old_storage_path}")
+                                else:
+                                    logger.warning(f"Old PDF not found in storage: {old_storage_path}")
+                            else:
+                                logger.warning(f"Could not extract filename from URL: {old_resume_pdf_url}")
+                        else:
+                            logger.warning(f"URL does not contain '/generated_resumes/': {old_resume_pdf_url}")
+                    except Exception as e:
+                        logger.warning(f"Failed to delete old PDF: {e}")
+                        import traceback
+                        logger.warning(traceback.format_exc())
+                        # Continue with upload even if deletion fails
+                elif is_regeneration:
+                    logger.warning("Regeneration requested but no old_resume_pdf_url found")
+
+                # 7. Upload PDF to Firebase Storage
                 logger.info("Uploading PDF to Firebase Storage...")
 
                 # Get user display name from Firebase Auth
@@ -342,7 +515,10 @@ async def generate_resume(
                 )
                 safe_job_title = request.job_title.replace(" ", "_").replace("/", "_")
 
-                filename = f"{safe_user_name}-{safe_company_name}-{safe_job_title}.pdf"
+                # Add timestamp to filename to prevent caching issues on regeneration
+                import time
+                timestamp = int(time.time())
+                filename = f"{safe_user_name}-{safe_company_name}-{safe_job_title}-{timestamp}.pdf"
                 storage_path = (
                     f"users/{authenticated_user_id}/generated_resumes/{filename}"
                 )
@@ -354,41 +530,88 @@ async def generate_resume(
                 resume_pdf_url = blob.public_url
                 logger.info(f"✓ PDF uploaded to: {resume_pdf_url}")
 
-                # 7. Save job data to Firestore
-                logger.info("Saving job data to Firestore...")
+                # 8. Save job data to Firestore
+                if is_regeneration:
+                    logger.info("Updating job data in Firestore...")
+                    
+                    # Update existing job data
+                    job_ref = db.collection("jobs").document(job_id)
+                    job_ref.update({
+                        "company_name": request.company_name,
+                        "job_title": request.job_title,
+                        "job_url": request.job_url,
+                        "job_description": request.job_description,
+                        "company_summary": state.company_summary,
+                        "company_citations": state.citations,
+                        "updated_at": firestore.SERVER_TIMESTAMP,
+                    })
+                    logger.info("✓ Job data updated in 'jobs' collection")
+                    
+                    # Update application data
+                    app_ref = (
+                        db.collection("job_applied")
+                        .document(authenticated_user_id)
+                        .collection("applications")
+                        .document(job_id)
+                    )
+                    app_ref.update({
+                        "resume_pdf_url": resume_pdf_url,
+                        "generated_items": generate_items,
+                        "regenerated_at": firestore.SERVER_TIMESTAMP,
+                        "status": "completed",
+                    })
+                    logger.info("✓ Application data updated in 'job_applied' collection")
+                else:
+                    logger.info("Saving job data to Firestore...")
 
-                # Save to "jobs" collection - contains job details
-                job_data = {
-                    "company_name": request.company_name,
-                    "job_title": request.job_title,
-                    "job_url": request.job_url,
-                    "job_description": request.job_description,
-                    "company_summary": state.company_summary,
-                    "company_citations": state.citations,
-                    "created_at": firestore.SERVER_TIMESTAMP,
-                }
+                    # Save to "jobs" collection - contains job details
+                    job_data = {
+                        "company_name": request.company_name,
+                        "job_title": request.job_title,
+                        "job_url": request.job_url,
+                        "job_description": request.job_description,
+                        "company_summary": state.company_summary,
+                        "company_citations": state.citations,
+                        "created_at": firestore.SERVER_TIMESTAMP,
+                    }
 
-                db.collection("jobs").document(job_id).set(job_data)
-                logger.info("✓ Job data saved to 'jobs' collection")
+                    db.collection("jobs").document(job_id).set(job_data)
+                    logger.info("✓ Job data saved to 'jobs' collection")
 
-                # Save to "job_applied" collection - tracks user applications
-                # Structure: job_applied/{user_id}/{job_id} = application data
-                application_data = {
-                    "job_id": job_id,
-                    "user_id": authenticated_user_id,
-                    "resume_zip_url": request.resume_zip_url,
-                    "resume_pdf_url": resume_pdf_url,
-                    "generated_items": generate_items,
-                    "applied_at": firestore.SERVER_TIMESTAMP,
-                    "status": "completed",
-                }
+                    # Save to "job_applied" collection - tracks user applications
+                    # Structure: job_applied/{user_id}/{job_id} = application data
+                    application_data = {
+                        "job_id": job_id,
+                        "user_id": authenticated_user_id,
+                        "resume_zip_url": request.resume_zip_url,
+                        "resume_pdf_url": resume_pdf_url,
+                        "generated_items": generate_items,
+                        "applied_at": firestore.SERVER_TIMESTAMP,
+                        "status": "completed",
+                    }
 
-                db.collection("job_applied").document(authenticated_user_id).collection(
-                    "applications"
-                ).document(job_id).set(application_data)
-                logger.info("✓ Application data saved to 'job_applied' collection")
+                    db.collection("job_applied").document(authenticated_user_id).collection(
+                        "applications"
+                    ).document(job_id).set(application_data)
+                    logger.info("✓ Application data saved to 'job_applied' collection")
 
             finally:
+                # Copy generated files to Resume/ directory for inspection
+                try:
+                    resume_output_dir = os.path.join(os.getcwd(), "Resume")
+                    os.makedirs(resume_output_dir, exist_ok=True)
+                    
+                    # Copy the entire output directory with job_id in the name
+                    output_copy_dir = os.path.join(resume_output_dir, f"job_{job_id[:8]}")
+                    if os.path.exists(output_dir):
+                        # Remove old copy if exists
+                        if os.path.exists(output_copy_dir):
+                            shutil.rmtree(output_copy_dir, ignore_errors=True)
+                        shutil.copytree(output_dir, output_copy_dir)
+                        logger.info(f"✓ Generated files copied to: {output_copy_dir}")
+                except Exception as e:
+                    logger.warning(f"Failed to copy generated files: {e}")
+                
                 # Cleanup temporary directory
                 logger.info("Cleaning up temporary files...")
                 shutil.rmtree(temp_dir, ignore_errors=True)
@@ -398,7 +621,7 @@ async def generate_resume(
 
             return GenerateResponse(
                 status="success",
-                message="Resume generated successfully",
+                message="Resume regenerated successfully" if is_regeneration else "Resume generated successfully",
                 job_id=job_id,
                 resume_pdf_url=resume_pdf_url,
             )
@@ -419,10 +642,12 @@ async def generate_resume(
         raise
     except Exception as e:
         logger.error(f"Error processing generate request: {str(e)}")
+        logger.error(f"Error type: {type(e).__name__}")
+        logger.error(f"Error traceback:", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="127.0.0.1", port=8000, log_level="info", access_log=True)
+    uvicorn.run("api:app", host="0.0.0.0", port=8000, log_level="info", access_log=True, reload=True)

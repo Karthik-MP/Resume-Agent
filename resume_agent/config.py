@@ -37,7 +37,7 @@ class Settings:
 
     # LLM Configuration
     LLM_TEMPERATURE: float = float(os.getenv("LLM_TEMPERATURE", "0.1"))
-    LLM_MAX_TOKENS: int = int(os.getenv("LLM_MAX_TOKENS", "4000"))
+    LLM_MAX_TOKENS: int = int(os.getenv("LLM_MAX_TOKENS", "2000"))
     LLM_TIMEOUT: int = int(os.getenv("LLM_TIMEOUT", "60"))
 
     # Application Settings

@@ -1,0 +1,78 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+!README.md
+
+# Cache and temporary files
+.resume_cache/
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+
+# Output directories
+output/
+Resume/
+
+# Test files
+tests/
+*.test.py
+pytest.ini
+
+# Environment files (will be provided at runtime)
+# .env is included in the build to avoid needing volume mounts
+.env.local
+
+# Firebase credentials (mount as volume or use secrets)
+*.json
+!pyproject.toml
+!resume-generator-*.json
+!profile.json
+
+# Logs
+*.log
+logs/
