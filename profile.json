@@ -75,6 +75,7 @@
       "Kubernetes",
       "CI/CD",
       "Jenkins",
+      "Artifactory",
       "Firebase"
     ],
     "Tools & Platforms": [
@@ -94,7 +95,14 @@
       "React Simple Maps",
       "CopilotKit",
       "LangChain",
-      "Maven"
+      "Maven",
+      "Gradle",
+      "GitLab",
+      "Git Bash",
+      "Jira",
+      "Confluence",
+      "Claude Code",
+      "OpenClaw"
     ]
   },
   "certifications": [
