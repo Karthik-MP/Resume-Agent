@@ -1,170 +1,287 @@
-# Resume Tailoring Agent — Overview
+# Resume Tailoring Agent
 
-This repository implements a LangGraph-orchestrated resume tailoring agent that:
+LangGraph-orchestrated agent that takes a job description + LaTeX resume template + `profile.json` and produces a tailored, ATS-friendly 1-page PDF. Exposes both a CLI and a production FastAPI server backed by Firebase.
 
-- Takes a job description (JD), a multi-file LaTeX resume project, and a trusted `profile.json` (skills + projects).
-- Produces a tailored, ATS-friendly 1-page PDF while preserving layout and LaTeX structure.
-- Uses a ChatGPT-class LLM (configurable) to generate LaTeX-only sections (skills and projects) from user-editable templates.
+## What It Does
 
-Goals:
+Given a job description, the agent:
+1. Researches the company via web search
+2. Scores all projects in `profile.json` against the JD using an LLM
+3. Selects the top 2 most relevant projects
+4. Filters and prioritizes skills from `profile.json` that match the JD, selected projects, and existing resume experience
+5. Generates LaTeX for the Skills and Projects sections using LLM + user-editable templates
+6. Compiles the final PDF with `latexmk`/`pdflatex`
 
-- Zero layout drift: fonts, margins, and spacing are preserved.
-- Truthfulness: only facts from the resume and `profile.json` are used; no fabrication.
-- Deterministic editing: replace entire sections (not line-level edits) and compile the resulting PDF.
+Key guarantees:
+- **No fabrication** — all skills, projects, and certifications come exclusively from `profile.json`
+- **Zero layout drift** — only Skills and Projects sections are replaced; all other sections (Experience, Education, etc.) are untouched
+- **Hard constraints** — exactly 2 projects, ≤10 skills per category, certifications always included
 
-## Quick Features
+---
 
-- Multi-file LaTeX resolver and mirrored output directory
-- LLM-driven skills & projects generation using user templates
-- Hard constraints enforced: exactly 2 projects, 2–3 STAR bullets per project
-- Certifications always included from `profile.json`
-- Safe replacements (lambda-based regex replacement) to avoid LaTeX escaping issues
-- Compile using `latexmk` or fallback `pdflatex` runs, with logs captured
+## Architecture
+
+Two entrypoints share the same LangGraph pipeline:
+
+- `tailor.py` — CLI for local use
+- `api.py` — FastAPI server for production; requires Firebase auth, fetches resume zip from Firebase Storage, stores results in Firestore
+
+```
+tailor.py (CLI)  ──┐
+                   ├──► LangGraph Pipeline (resume_agent/graph.py)
+api.py (FastAPI) ──┘
+```
+
+---
+
+## LangGraph Pipeline
+
+Linear 9-node DAG (`resume_agent/graph.py`):
+
+```
+load_inputs
+    │  Read JD text, wipe & recreate output dir
+    ▼
+analyze_jd
+    │  Extract title + keyword list from JD text
+    ▼
+infer_company_and_research
+    │  Web-search company mission; collect citations
+    ▼
+load_resume_files
+    │  Find main.tex, resolve \input/\include recursively, read all .tex files
+    ▼
+load_profile_json
+    │  Load profile.json (skills, projects, certifications)
+    ▼
+plan_edits
+    │  LLM call 1: Score all projects against JD (batched, single call)
+    │  → Select top 2 projects
+    │  LLM call 2: Filter skills by JD + project tech + experience section
+    │  → Post-process: force-add skills found in resume Experience section
+    │  → Post-process: force-add profile skills word-boundary matched in JD
+    │  → Force-add required languages implied by frameworks (e.g. Spring Boot → Java)
+    │  → Cap each category at 10, always include certifications
+    ▼
+apply_edits
+    │  LLM call 3: Generate Skills LaTeX from template (skills_format.tex)
+    │  → Regex-replace %-*PROGRAMMING SKILLS-*% section using lambda (avoids backslash bugs)
+    │  LLM call 4: Generate Projects LaTeX from template (projects_format.tex)
+    │  → Regex-replace %-*PROJECTS-*% section using lambda
+    │  Write all updated .tex files to output dir
+    ▼
+compile_pdf
+    │  latexmk (preferred) or pdflatex fallback
+    │  Output filename: {username}-{Company}-{Position}-{MM-YYYY}.pdf
+    ▼
+generate_report
+       Write report.md: selected projects, skills, citations, verification list
+```
+
+State flows through `TailorState` (Pydantic model). If any node sets `state.error_status`, all downstream nodes skip.
+
+---
+
+## API Request Flow (`POST /api/v1/generate`)
+
+```
+Client
+  │  POST /api/v1/generate
+  │  Headers: Authorization: Bearer <Firebase ID token>
+  │  Body: { companyName, jobTitle, jobDescription, resumeZipUrl, jobUrl?, jobId? }
+  ▼
+verify_firebase_token
+  │  Verifies Firebase ID token → extracts uid
+  ▼
+Determine job ID
+  │  New job: generate UUID
+  │  Regeneration (jobId provided): verify job exists in Firestore under uid, fetch old PDF URL
+  ▼
+Download & extract resume zip
+  │  Cache keyed by MD5(url + CACHE_VERSION) in .resume_cache/
+  │  Cache hit: copy from cache
+  │  Cache miss: download → save to cache → extract → copy
+  ▼
+Write JD to temp file
+  │  Load profile.json from server working directory
+  ▼
+Run LangGraph pipeline
+  │  (see pipeline above)
+  │  Raises LLMQuotaExceededError → HTTP 402
+  │  Raises RATE_LIMIT_EXCEEDED/LLM_FAILURE → HTTP 503
+  ▼
+Verify PDF exists at output path
+  ▼
+Delete old PDF from Firebase Storage (regeneration only)
+  ▼
+Upload new PDF to Firebase Storage
+  │  Path: users/{uid}/generated_resumes/{username}-{company}-{title}-{timestamp}.pdf
+  │  Made public; returns public URL
+  ▼
+Save to Firestore
+  │  jobs/{job_id} — job details + company research
+  │  job_applied/{uid}/applications/{job_id} — user application record + PDF URL
+  ▼
+Copy output files to ./Resume/job_{job_id[:8]}/ (for server-side inspection)
+  ▼
+Cleanup temp dir
+  ▼
+Return { status, message, job_id, resume_pdf_url }
+```
+
+Other endpoints:
+- `GET /` — API info
+- `GET /health` — health check
+
+---
 
 ## Repository Layout
 
-Root
-
-- `tailor.py` — CLI entrypoint (runs the LangGraph pipeline)
-- `profile.json` — trusted source for skills, projects, certifications
-- `pyproject.toml` — project metadata & dev dependencies
-- `README.md` — original README (kept for history)
-- `README_UPDATED.md` — this updated README
-- `SKILLS_TEMPLATE_GUIDE.md` — guidance for templates
-
-resume_agent/
-
-- `graph.py` — pipeline orchestration (LangGraph nodes)
-- `prompts.py` — strict LLM system and user prompts
-- `tools.py` — LLM wrapper, web search helpers
-- `tex.py` — multi-file LaTeX resolver and read/write helpers
-- `profile.py` — `profile.json` loader and matcher
-- `compile.py` — LaTeX compilation utilities
-- `report.py` — transparency & audit report generation
-- `utils.py` — shared utilities and logging
-
-SWE_Resume_Template/
-
-- `templates/skills_format.tex` — skills template (user-editable)
-- `templates/projects_format.tex` — projects template (user-editable)
-- `src/` — sample section files used by the template
-
-tests/
-
-- Unit tests for `tex` include resolver and project dedupe logic
-
-## Getting Started
-
-Prerequisites
-
-- Python 3.11+ (project uses modern typing and features)
-- A LaTeX toolchain (`latexmk` or `pdflatex`) for PDF compilation
-- Optionally: an OpenAI-compatible API key if you want LLM generation
-
-Install
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+```
+.
+├── tailor.py                    # CLI entrypoint
+├── api.py                       # FastAPI server
+├── profile.json                 # Single source of truth: skills, projects, certifications
+├── pyproject.toml               # Dependencies (managed with uv)
+├── resume_agent/
+│   ├── graph.py                 # LangGraph pipeline nodes + TailorState
+│   ├── prompts.py               # LLM system + user prompts
+│   ├── tools.py                 # LLM wrapper (multi-provider), web search
+│   ├── tex.py                   # LaTeX \input resolver, template loader, read/write
+│   ├── profile.py               # profile.json loader
+│   ├── compile.py               # latexmk / pdflatex compilation
+│   ├── report.py                # report.md generation
+│   ├── star.py                  # STAR bullet rewriting
+│   └── utils.py                 # Shared utilities
+├── SWE_Resume_Template/
+│   ├── templates/
+│   │   ├── skills_format.tex    # Skills section template (user-editable)
+│   │   └── projects_format.tex  # Projects section template (user-editable)
+│   └── src/                     # Section .tex files used by the template
+└── tests/                       # pytest unit tests
 ```
 
-Configuration
+---
 
-- Copy `.env.example` to `.env` and set required keys.
-- Important environment variables:
-  - `OPENAI_API_KEY` — required for LLM generation (if you use OpenAI-compatible providers)
-  - `OPENAI_BASE_URL` — optional custom base URL (default: https://api.openai.com/v1)
-  - `OPENAI_MODEL` — model name (default recommended: `gpt-4` or `gpt-4o-mini`)
-  - `LLM_TEMPERATURE` — set low (0.0–0.2) for deterministic output
+## Setup
 
-Example `.env` values:
+**Prerequisites:**
+- Python 3.11+
+- LaTeX toolchain (`latexmk` or `pdflatex`)
+- Firebase service account JSON (for `api.py` only)
 
+**Install:**
 ```bash
-OPENAI_API_KEY=sk-...
-OPENAI_BASE_URL=https://api.openai.com/v1
-OPENAI_MODEL=gpt-4
-LLM_TEMPERATURE=0.1
+uv sync
+cp .env.example .env   # fill in API keys
 ```
 
-## Usage
-
-Run the tailoring pipeline via the CLI. Minimal example:
-
+**Run CLI:**
 ```bash
 python tailor.py \
   --jd ./jd.txt \
   --resume_dir ./SWE_Resume_Template/ \
   --profile ./profile.json \
   --out_dir ./output/ \
-  --out_pdf ./output/final.pdf
+  --company "CompanyName"
 ```
 
-Optional flags: `--job_url`, `--company` (used for company research), `--no-llm` (force fallback behavior).
+**Run API server:**
+```bash
+uvicorn api:app --host 0.0.0.0 --port 8000 --reload
+# or
+python api.py
+```
 
-Output artifacts
+**Docker:**
+```bash
+docker compose up --build
+```
 
-- `output/` (default) — mirrored LaTeX files written here
-- `output/final.pdf` — compiled PDF (if compilation succeeded)
-- `output/report.md` — audit report with keyword coverage, selected projects, and verification-needed list
+---
 
-## How It Works (High Level)
+## Configuration
 
-1. load_inputs — reads JD, resume files, and profile JSON; cleans output dir
-2. analyze_jd — extracts keywords, responsibilities, and seniority signals
-3. load_resume_files — resolves `\input`/`\include`, reads editable section files
-4. load_profile_json — loads trusted `profile.json` (skills, projects, certifications)
-5. plan_edits — selects top-2 relevant projects and derives skills by category (strict mapping)
-6. apply_edits — asks LLM to generate LaTeX for skills/projects based on templates; falls back to safe regex replacements when LLM fails
-7. compile_pdf — attempts `latexmk` or `pdflatex` and captures logs
-8. generate_report — writes `report.md` summarizing changes, sources, and verification items
+`LLM_PROVIDER` in `.env` selects the active provider. Supported: `openai`, `gemini`, `moonshot`, `custom` (any OpenAI-compatible endpoint).
 
-## Templates and Customization
+| Variable | Purpose |
+|---|---|
+| `LLM_PROVIDER` | `openai` / `gemini` / `moonshot` / `custom` |
+| `OPENAI_API_KEY` | OpenAI or compatible key |
+| `OPENAI_BASE_URL` | Custom base URL (optional) |
+| `OPENAI_MODEL` | Model name |
+| `GEMINI_API_KEY` | Gemini key |
+| `LLM_TEMPERATURE` | Set low (0.0–0.2) for determinism |
+| `FIREBASE_CREDENTIALS_PATH` | Path to Firebase service account JSON (`api.py` only) |
 
-- Edit `SWE_Resume_Template/templates/skills_format.tex` and `projects_format.tex` to adjust output layout — keep placeholders like `<comma-separated list>` or `<Project Name>`.
-- See `SKILLS_TEMPLATE_GUIDE.md` for examples and mapping rules between `profile.json` categories and template categories.
+See `LLM_CONFIGURATION.md` for full provider-specific details.
 
-## LLM Prompting & Safety
+---
 
-- The system uses strict system prompts (see `resume_agent/prompts.py`) instructing the LLM to output ONLY LaTeX and follow the template exactly.
-- Hard constraints enforced in code:
-  - Exactly two projects in projects section
-  - 2–3 STAR bullets per project
-  - Certifications from `profile.json` are always included
-  - Do not invent facts not present in `profile.json` or the original resume
+## LLM Error Handling
 
-If the LLM output contains backslash or escape issues, the pipeline will retry with a lower temperature and, if necessary, use the safe fallback replacement.
+`call_llm()` in `tools.py`:
+- Retries once on HTTP 429
+- Raises `RATE_LIMIT_EXCEEDED` — pipeline stops, HTTP 503
+- Raises `QUOTA_EXCEEDED` / `LLMQuotaExceededError` — pipeline stops, HTTP 402
+- Raises `LLM_FAILURE` — pipeline stops, HTTP 503
 
-## Company Research (optional)
+The pipeline never silently falls back to incomplete output when the LLM fails — it stops and surfaces the error.
 
-- If `--job_url` or `--company` is supplied, `tools.py` performs lightweight web fetching and summarization to extract company mission and product signals to inform keyword selection.
-- All web sources and citations are recorded in `output/report.md`.
+---
 
-## Troubleshooting
+## profile.json
 
-- LaTeX compilation errors: check `output/compile.log` for details. If compilation fails, the updated LaTeX files remain in `output/` for manual inspection.
-- LLM not called: verify `OPENAI_API_KEY` and network connectivity.
-- Bad LaTeX from LLM: lower `LLM_TEMPERATURE` and retry; templates should use simple placeholders.
+Single source of truth. Structure:
+
+```json
+{
+  "username": "FirstName_LastName",
+  "skills": {
+    "Languages": ["Python", "Java", ...],
+    "Web & Backend": ["React", "FastAPI", ...],
+    "Data Science & ML": [...],
+    "Databases": [...],
+    "Cloud & DevOps": [...],
+    "Tools & Platforms": [...]
+  },
+  "projects": [
+    {
+      "name": "Project Name",
+      "tech_stack": ["Python", "PostgreSQL"],
+      "tags": ["backend", "ml"],
+      "description": ["bullet 1", "bullet 2"],
+      "metrics": ["reduced latency by 40%"],
+      "links": ["https://github.com/..."]
+    }
+  ],
+  "certifications": ["AWS Certified Developer"]
+}
+```
+
+---
+
+## Templates
+
+Edit `SWE_Resume_Template/templates/skills_format.tex` and `projects_format.tex` to adjust output layout. The LLM fills in the content; keep placeholder structure intact. See `SKILLS_TEMPLATE_GUIDE.md`.
+
+Section markers in your LaTeX files tell the pipeline where to do replacements:
+- `%-*PROGRAMMING SKILLS-*%` before `\section{Technical Skills}`
+- `%-*PROJECTS-*%` before `\section{Projects}`
+
+---
 
 ## Tests
 
-- Unit tests are under `tests/` for the `tex` include resolver and project dedupe/matching logic. Run with `pytest`.
+```bash
+pytest                     # all tests
+pytest tests/test_tex.py   # single file
+```
 
-## Development Notes & Assumptions
+Tests cover: LaTeX `\input`/`\include` resolver, project deduplication and matching logic.
 
-- The system treats `profile.json` as the single trusted source for additional skills and projects. No external fabrication.
-- Templates must preserve placeholders the LLM will replace. See `SKILLS_TEMPLATE_GUIDE.md`.
-- LLM usage is optional; the pipeline supports a safe regex-based fallback.
-
-## Next Steps
-
-- Improve LLM post-processing sanitizers for LaTeX escapes.
-- Add optional ATS scoring step and iterative prompt refinement.
+---
 
 ## License
 
 MIT
-
----
-
-If you'd like, I can run a quick markdown lint or re-run the tailoring pipeline to incorporate the new `Data Collection System` project you recently added to `profile.json`.
